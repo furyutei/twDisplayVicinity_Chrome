@@ -192,13 +192,15 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     TARGET_TWEET_CLASS = SCRIPT_NAME + '-target-tweet',
     VICINITY_TWEET_CLASS = SCRIPT_NAME + '-vicinity-tweet',
     
+    OBSERVATION_WRAPPER_ID = SCRIPT_NAME + '-observation_wrapper',
+    
     ACT_SEARCH_OFFSET_SEC = 60 * 60, // ユーザーアクション（リツイート／いいね）通知近傍検索の際に、通知時間から遡るオフセット値(秒)
     
     WAIT_DOM_REFRESH_MS = 100, // 通信データ通知→DOM更新待ち時間(単位：ms)
     WAIT_BEFORE_GIVEUP_SCROLL_SEC = 30, // 強制スクロールさせてタイムラインの続きを読み込む際に、いつまでも変化が見られず、諦めるまでの時間(単位:秒)
     
-    MAX_ADJUST_SCROLL_NUMBER = 30, // ツイート検索後の位置調整でチェックする最大数
-    ADJUST_CHECK_INTERVAL_MS = 200, // 同・チェック間隔(単位：ms)
+    MAX_ADJUST_SCROLL_NUMBER = 15, // ツイート検索後の位置調整でチェックする最大数
+    ADJUST_CHECK_INTERVAL_MS = 100, // 同・チェック間隔(単位：ms)
     ADJUST_ACCEPTABLE_NUMBER = 3, // 同・ツイートのスクロール位置が安定するまでの回数（連続してADJUST_ACCEPTABLE_NUMBER回一致すれば安定したとみなす）
     
     LIMIT_STATUSES_RETWEETS_USER_NUMBER = 100, // statuses/retweets のユーザー数制限
@@ -888,6 +890,32 @@ function fetch_retweets( tweet_id, max_user_count ) {
 } // end of fetch_retweets()
 
 
+var [
+    request_observation,
+    get_request_observation_container,
+] = ( () => {
+    var $observation_container = $( '<div/>' ).attr( 'id', OBSERVATION_WRAPPER_ID ).appendTo( $( d.documentElement ) ).css( {
+            'display' : 'none',
+        } ),
+        
+        $update_mark = $( '<input />' ).addClass( 'update_mark' ).appendTo( $observation_container ).attr( {
+            'type' : 'hidden',
+        } ),
+        
+        get_request_observation_container = () => $observation_container,
+        
+        request_observation = () => {
+            $update_mark.remove();
+            $update_mark.attr( 'value', new Date().getTime() ).appendTo( $observation_container );
+        };
+    
+    return [
+        request_observation,
+        get_request_observation_container,
+    ];
+} )();
+
+
 var open_child_window = ( () => {
     var child_window_counter = 0;
     
@@ -1508,14 +1536,6 @@ var search_vicinity_tweet = ( () => {
             return threshold_timestamp_ms;
         } )(),
         
-        ua = w.navigator.userAgent.toLowerCase(),
-        animate_target_selector = ( ( ( ! w.chrome ) && ua.indexOf( 'webkit' ) != -1 ) || ( ua.indexOf( 'opr' ) != -1 ) || ( ua.indexOf( 'edge' ) != -1 ) ) ? 'body,html' : 'html',
-        // [Javascript Chromeでページトップに戻る(scrollTop)が効かなくなってた件。 - かもメモ](http://chaika.hatenablog.com/entry/2017/09/22/090000)
-        // ※ 2017/10現在 ($.fn.jquery = 3.1.1)
-        //   'html' ← Firefox, Chrome, Vivaldi, IE
-        //   'body' ← Safari, Opera, Edge
-        animate_speed = 'fast', //  'slow', 'normal', 'fast' またはミリ秒単位の数値
-        
         search_status = 'initialize', // 'initialize', 'wait_ready', 'search', 'found', 'error'
         stop_scrolling_request = false,
         
@@ -1523,6 +1543,27 @@ var search_vicinity_tweet = ( () => {
         $timeline = $(),
         $found_tweet_container = $(),
         found_tweet_info = {},
+        
+        scroll_to = ( () => {
+            var ua = w.navigator.userAgent.toLowerCase(),
+                animate_target_selector = ( ( ( ! w.chrome ) && ua.indexOf( 'webkit' ) != -1 ) || ( ua.indexOf( 'opr' ) != -1 ) || ( ua.indexOf( 'edge' ) != -1 ) ) ? 'body,html' : 'html',
+                // [Javascript Chromeでページトップに戻る(scrollTop)が効かなくなってた件。 - かもメモ](http://chaika.hatenablog.com/entry/2017/09/22/090000)
+                // ※ 2017/10現在 ($.fn.jquery = 3.1.1)
+                //   'html' ← Firefox, Chrome, Vivaldi, IE
+                //   'body' ← Safari, Opera, Edge
+                animate_speed = 'fast'; //  'slow', 'normal', 'fast' またはミリ秒単位の数値
+            
+            return ( top_scroll_top, smooth ) => {
+                if ( smooth ) {
+                    $( animate_target_selector ).animate( {
+                        scrollTop : top_scroll_top,
+                    }, animated_speed );
+                }
+                else {
+                    $( w ).scrollTop( top_scroll_top );
+                }
+            };
+        } )(),
         
         [ 
             hide_sidebar,
@@ -1700,12 +1741,15 @@ var search_vicinity_tweet = ( () => {
             return () => {
                 var is_itself = false,
                     $found_tweet = $(),
+                    
                     $tweet_links = $timeline.find(
                         //'div:not(.' + marked_class + ') > article[role="article"] a[role="link"]:has(time[datetime])'
+                        //※チェック済みは除いていたが、画面から外れたツイートは除去されるためあまり意味がない→常に全てチェック
                         'article[role="article"] a[role="link"]:has(time[datetime])'
                     ).filter( function () {
                         return parse_individual_tweet_url( $( this ).attr( 'href' ) );
                     } ),
+                    
                     $unrecognized_tweet_links = $tweet_links.filter( function () {
                         var tweet_id = parse_individual_tweet_url( $( this ).attr( 'href' ) ).tweet_id,
                             reacted_tweet_info = get_reacted_tweet_info( tweet_id );
@@ -1720,13 +1764,15 @@ var search_vicinity_tweet = ( () => {
                     log_debug( 'unrecognized', $unrecognized_tweet_links.length,  'link(s) found:', $unrecognized_tweet_links, 'reacted_tweet_info_map:', get_reacted_tweet_info_map() );
                     
                     // TODO: fetch データ取得のタイミングによっては get_reacted_tweet_info() でツイート情報が取得できない場合あり
-                    // →遅延させて再検索（このケースでは DOM 更新が走るとは限らないので setTimeout() で起動）
-                    // → analyze_fetch_data() で DOM 要素を挿入するようにしたので改善を期待
+                    // →遅延させて再検索
                     /*
                     //setTimeout( () => {
                     //    search_vicinity_tweet();
                     //}, WAIT_DOM_REFRESH_MS );
                     */
+                    
+                    //request_observation(); // このパターンの場合、analyze_fetch_data() により更新されるはず
+                    
                     return $();
                 }
                 
@@ -1742,7 +1788,7 @@ var search_vicinity_tweet = ( () => {
                         tweet_url_info = parse_individual_tweet_url( $tweet_link.attr( 'href' ) );
                     
                     if ( ! stop_scrolling_request ) {
-                        $( w ).scrollTop( $tweet_link.offset().top - ( $( w ).height() / 2 ) ); // 1 ツイートずつスクロールさせる
+                        scroll_to( $tweet_link.offset().top - ( $( w ).height() / 2 ) ); // 1 ツイートずつスクロールさせる
                     }
                     
                     if ( ! tweet_url_info ) {
@@ -1806,20 +1852,14 @@ var search_vicinity_tweet = ( () => {
                     // TODO: 目的のツイートがあるにもかかわらず、通り過ぎることがあった
                     // →上のループ内で 1 ツイートずつスクロールさせることで改善されることを期待
                     // 見つからなかった場合、強制スクロール
-                    /*
-                    ////$( w ).scrollTop( $( d ).height() );
-                    //$( animate_target_selector ).animate( {
-                    //    //scrollTop : ( 0 < $tweet_links.length ) ? $tweet_links.last().offset().top : $( d ).height(), // →こちらだと無限ループする可能性あり
-                    //    scrollTop : $( d ).height(),
-                    //}, animate_speed );
-                    */
                     
                     log_debug( 'id comparison:', ( ( current_tweet_id == last_tweet_id ) && ( current_target_id == last_target_id ) ) );
                     log_debug( current_tweet_id, 'vs', last_tweet_id, ',', current_target_id, 'vs', last_target_id );
                     
                     if ( ( current_tweet_id == last_tweet_id ) && ( current_target_id == last_target_id ) ) {
                         if ( 0 < $current_tweet_container.length ) {
-                            $( w ).scrollTop( $( w ).scrollTop() + $current_tweet_container.height() );
+                            // 前回チェック時と最終ツイートが変わらなければツイートの高さ分スクロールアップ
+                            scroll_to( $( w ).scrollTop() + $current_tweet_container.height() );
                         }
                     }
                     
@@ -1864,12 +1904,7 @@ var search_vicinity_tweet = ( () => {
                         return true;
                     }
                     
-                    /*
-                    //$( animate_target_selector ).animate( {
-                    //    scrollTop : to_scroll_top,
-                    //}, animate_speed );
-                    */
-                    $( w ).scrollTop( to_scroll_top );
+                    scroll_to( to_scroll_top );
                     
                     return false;
                 }, // end of adjust_scroll()
@@ -2571,9 +2606,7 @@ var [
 //}
 
 
-function analyze_fetch_data( message, $analyze_update_mark ) {
-    var $fetch_wrapper_container;
-    
+function analyze_fetch_data( message ) {
     switch ( message.message_id ) {
         case 'FETCH_REQUEST_DATA' :
             try {
@@ -2594,12 +2627,7 @@ function analyze_fetch_data( message, $analyze_update_mark ) {
             break;
     }
     
-    if ( $analyze_update_mark && ( 0 < $analyze_update_mark.length ) ) {
-        $fetch_wrapper_container = $analyze_update_mark.parent();
-        $analyze_update_mark.remove();
-        $analyze_update_mark.attr( 'value', new Date().getTime() ).appendTo( $fetch_wrapper_container ); // analyze_*() により更新されたことを DOM 更新により MutationObserver に伝達
-    }
-    
+    request_observation();
 } // end of analyze_fetch_data()
 
 
@@ -2682,7 +2710,7 @@ function start_key_observer() {
 
 function start_tweet_observer() {
     var tweet_container = d.body,
-        fetch_wrapper_container = d.querySelector( '#' + SCRIPT_NAME + '_fetch-wrapper-container' ),
+        request_observation_container = get_request_observation_container().get( 0 ),
         
         on_change = ( records ) => {
             var result;
@@ -2726,7 +2754,7 @@ function start_tweet_observer() {
             performance.mark( 'ma2' );
         } ),
         
-        fetch_observer = new MutationObserver( ( records ) => {
+        request_observer = new MutationObserver( ( records ) => {
             performance.mark( 'mb1' );
             on_change( records );
             performance.mark( 'mb2' );
@@ -2734,9 +2762,7 @@ function start_tweet_observer() {
     
     observer.observe( tweet_container, { childList : true, subtree : true } );
     
-    if ( fetch_wrapper_container ) {
-        fetch_observer.observe( fetch_wrapper_container, { childList : true, subtree : false } );
-    }
+    request_observer.observe( request_observation_container, { childList : true, subtree : false } );
 } // end of start_tweet_observer()
 
 
@@ -2747,18 +2773,9 @@ function start_fetch_observer() {
     // ※ chrome.webRequest.onCompleted では Response Headers は取得できても Body は取得できない
     // ※ chrome.devtools.network.onRequestFinished では、開発者ツールを開いていないと取得できない
     // → コンテンツに script を埋め込み、XMLHttpRequest / fetch にパッチをあてて取得
-    var fetch_wrapper_id = SCRIPT_NAME + '_fetch-wrapper-container',
-        analyze_update_mark_id = SCRIPT_NAME + '_analyze_update_mark_id',
-        
-        $fetch_wrapper_container = $( '<div/>' ).attr( 'id', fetch_wrapper_id ).appendTo( $( d.documentElement ) ).css( {
-            'display' : 'none',
-        } ),
-        $analyze_update_mark = $( '<input/>' ).attr( 'id', analyze_update_mark_id ).appendTo( $fetch_wrapper_container ).css( {
-            'type' : 'hidden',
-        } ),
-        
-        make_fetch_wrapper = ( OBSERVE_DOM_FETCH_DATA ) => {
-            var container_dom_id = '##SCRIPT_NAME##_fetch-wrapper-container',
+    
+    var make_fetch_wrapper = ( OBSERVE_DOM_FETCH_DATA ) => {
+            var container_dom_id = '##OBSERVATION_WRAPPER_ID##',
                 request_dom_id = '##SCRIPT_NAME##_fetch-wrapper-request',
                 result_dom_id = '##SCRIPT_NAME##_fetch-wrapper-result',
                 
@@ -3202,10 +3219,20 @@ function start_fetch_observer() {
             return;
         }
         
-        analyze_fetch_data( message, $analyze_update_mark );
+        analyze_fetch_data( message );
     } );
     
-    script.textContent = '(' + make_fetch_wrapper.toString().replace( /##SCRIPT_NAME##/g, SCRIPT_NAME ).replace( /##API_USER_TIMELINE_TEMPLATE##/g, API_USER_TIMELINE_TEMPLATE ) + ')(' + OPTIONS.OBSERVE_DOM_FETCH_DATA +');';
+    script.textContent = [
+        '(',
+        make_fetch_wrapper.toString()
+            .replace( /##SCRIPT_NAME##/g, SCRIPT_NAME )
+            .replace( /##API_USER_TIMELINE_TEMPLATE##/g, API_USER_TIMELINE_TEMPLATE )
+            .replace( /##OBSERVATION_WRAPPER_ID##/g, OBSERVATION_WRAPPER_ID ),
+        ')(',
+            OPTIONS.OBSERVE_DOM_FETCH_DATA,
+        ');',
+    ].join( '' );
+    
     if ( nonce ) {
         script.setAttribute( 'nonce', nonce );
     }
