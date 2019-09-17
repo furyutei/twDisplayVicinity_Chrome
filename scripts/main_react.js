@@ -198,7 +198,7 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     WAIT_BEFORE_GIVEUP_SCROLL_SEC = 30, // 強制スクロールさせてタイムラインの続きを読み込む際に、いつまでも変化が見られず、諦めるまでの時間(単位:秒)
     
     MAX_ADJUST_SCROLL_NUMBER = 30, // ツイート検索後の位置調整でチェックする最大数
-    ADJUST_CHECK_INTERVAL_MS = 500, // 同・チェック間隔(単位：ms)
+    ADJUST_CHECK_INTERVAL_MS = 200, // 同・チェック間隔(単位：ms)
     ADJUST_ACCEPTABLE_NUMBER = 3, // 同・ツイートのスクロール位置が安定するまでの回数（連続してADJUST_ACCEPTABLE_NUMBER回一致すれば安定したとみなす）
     
     LIMIT_STATUSES_RETWEETS_USER_NUMBER = 100, // statuses/retweets のユーザー数制限
@@ -1692,131 +1692,159 @@ var search_vicinity_tweet = ( () => {
             ];
         } )(),
         
-        search_tweet = () => {
-            var is_itself = false,
-                $found_tweet = $(),
-                $tweet_links = $timeline.find( 'div:not(.' + marked_class + ') > article[role="article"] a[role="link"]:has(time[datetime])' ).filter( function () {
-                    return parse_individual_tweet_url( $( this ).attr( 'href' ) );
-                } ),
-                $unrecognized_tweet_links = $tweet_links.filter( function () {
-                    var tweet_id = parse_individual_tweet_url( $( this ).attr( 'href' ) ).tweet_id,
-                        reacted_tweet_info = get_reacted_tweet_info( tweet_id );
+        
+        search_tweet = ( () => {
+            var last_tweet_id,
+                last_target_id;
+            
+            return () => {
+                var is_itself = false,
+                    $found_tweet = $(),
+                    $tweet_links = $timeline.find(
+                        //'div:not(.' + marked_class + ') > article[role="article"] a[role="link"]:has(time[datetime])'
+                        'article[role="article"] a[role="link"]:has(time[datetime])'
+                    ).filter( function () {
+                        return parse_individual_tweet_url( $( this ).attr( 'href' ) );
+                    } ),
+                    $unrecognized_tweet_links = $tweet_links.filter( function () {
+                        var tweet_id = parse_individual_tweet_url( $( this ).attr( 'href' ) ).tweet_id,
+                            reacted_tweet_info = get_reacted_tweet_info( tweet_id );
+                        
+                        if ( ! reacted_tweet_info ) {
+                            log_debug( 'reacted_tweet_info is not found: tweet_id=', tweet_id );
+                        }
+                        return ( ! reacted_tweet_info );
+                    } );
+                
+                if ( 0 < $unrecognized_tweet_links.length ) {
+                    log_debug( 'unrecognized', $unrecognized_tweet_links.length,  'link(s) found:', $unrecognized_tweet_links, 'reacted_tweet_info_map:', get_reacted_tweet_info_map() );
                     
-                    if ( ! reacted_tweet_info ) {
-                        log_debug( 'reacted_tweet_info is not found: tweet_id=', tweet_id );
+                    // TODO: fetch データ取得のタイミングによっては get_reacted_tweet_info() でツイート情報が取得できない場合あり
+                    // →遅延させて再検索（このケースでは DOM 更新が走るとは限らないので setTimeout() で起動）
+                    // → analyze_fetch_data() で DOM 要素を挿入するようにしたので改善を期待
+                    /*
+                    //setTimeout( () => {
+                    //    search_vicinity_tweet();
+                    //}, WAIT_DOM_REFRESH_MS );
+                    */
+                    return $();
+                }
+                
+                var current_tweet_id,
+                    current_target_id,
+                    $current_tweet_container = $();
+                
+                $tweet_links.each( function () {
+                    var $tweet_link = $( this ),
+                        $tweet = $tweet_link.parents( 'article[role="article"]:first' ),
+                        $tweet_container = $tweet.parent().addClass( marked_class ),
+                        // ※ article[role="article"] は頻繁に書き換わることがあるため、比較的安定な parent() に class を設定
+                        tweet_url_info = parse_individual_tweet_url( $tweet_link.attr( 'href' ) );
+                    
+                    if ( ! stop_scrolling_request ) {
+                        $( w ).scrollTop( $tweet_link.offset().top - ( $( w ).height() / 2 ) ); // 1 ツイートずつスクロールさせる
                     }
-                    return ( ! reacted_tweet_info );
+                    
+                    if ( ! tweet_url_info ) {
+                        return;
+                    }
+                    
+                    $current_tweet_container = $tweet_container;
+                    current_tweet_id = tweet_url_info.tweet_id;
+                    
+                    var current_reacted_tweet_info = get_reacted_tweet_info( current_tweet_id ),
+                        current_retweeter_screen_name = get_retweeter_screen_name( $tweet ),
+                        current_reacted_info = ( current_retweeter_screen_name ) ? ( current_reacted_tweet_info.rt_info_map.screen_name_map[ current_retweeter_screen_name ] || current_reacted_tweet_info ) : current_reacted_tweet_info,
+                        current_timestamp_ms = current_reacted_info.timestamp_ms;
+                    
+                    current_target_id = current_reacted_info.id;
+                    
+                    if ( target_info.id ) {
+                        if ( current_target_id == target_info.id ) {
+                            is_itself = true;
+                            $found_tweet = $tweet;
+                            
+                            return false;
+                        }
+                        
+                        if ( bignum_cmp( current_target_id, target_info.id ) < 0 ) {
+                            is_itself = false;
+                            $found_tweet = $tweet;
+                            
+                            return false;
+                        }
+                    }
+                    else {
+                        if ( current_tweet_id == reacted_tweet_info.id ) {
+                            is_itself = true;
+                            $found_tweet = $tweet;
+                            
+                            return false;
+                        }
+                        
+                        if ( current_timestamp_ms <= threshold_timestamp_ms ) {
+                            is_itself = false;
+                            $found_tweet = $tweet;
+                            
+                            return false;
+                        }
+                        
+                        if ( bignum_cmp( current_target_id, reacted_tweet_info.id ) < 0 ) {
+                            is_itself = false;
+                            $found_tweet = $tweet;
+                            
+                            return false;
+                        }
+                    }
                 } );
-            
-            if ( 0 < $unrecognized_tweet_links.length ) {
-                log_debug( 'unrecognized', $unrecognized_tweet_links.length,  'link(s) found:', $unrecognized_tweet_links, 'reacted_tweet_info_map:', get_reacted_tweet_info_map() );
                 
-                // TODO: fetch データ取得のタイミングによっては get_reacted_tweet_info() でツイート情報が取得できない場合あり
-                // →遅延させて再検索（このケースでは DOM 更新が走るとは限らないので setTimeout() で起動）
-                // → analyze_fetch_data() で DOM 要素を挿入するようにしたので改善を期待
-                /*
-                //setTimeout( () => {
-                //    search_vicinity_tweet();
-                //}, WAIT_DOM_REFRESH_MS );
-                */
-                return $();
-            }
-            
-            $tweet_links.each( function () {
-                var $tweet_link = $( this ),
-                    $tweet = $tweet_link.parents( 'article[role="article"]:first' ),
-                    $tweet_container = $tweet.parent().addClass( marked_class ),
+                if ( $found_tweet.length <= 0 ) {
+                    if ( stop_scrolling_request ) {
+                        return $();
+                    }
+                    
+                    // TODO: 目的のツイートがあるにもかかわらず、通り過ぎることがあった
+                    // →上のループ内で 1 ツイートずつスクロールさせることで改善されることを期待
+                    // 見つからなかった場合、強制スクロール
+                    /*
+                    ////$( w ).scrollTop( $( d ).height() );
+                    //$( animate_target_selector ).animate( {
+                    //    //scrollTop : ( 0 < $tweet_links.length ) ? $tweet_links.last().offset().top : $( d ).height(), // →こちらだと無限ループする可能性あり
+                    //    scrollTop : $( d ).height(),
+                    //}, animate_speed );
+                    */
+                    
+                    log_debug( 'id comparison:', ( ( current_tweet_id == last_tweet_id ) && ( current_target_id == last_target_id ) ) );
+                    log_debug( current_tweet_id, 'vs', last_tweet_id, ',', current_target_id, 'vs', last_target_id );
+                    
+                    if ( ( current_tweet_id == last_tweet_id ) && ( current_target_id == last_target_id ) ) {
+                        if ( 0 < $current_tweet_container.length ) {
+                            $( w ).scrollTop( $( w ).scrollTop() + $current_tweet_container.height() );
+                        }
+                    }
+                    
+                    last_tweet_id = current_tweet_id;
+                    last_target_id = current_target_id;
+                    
+                    return $();
+                }
+                
+                var $found_tweet_container = $found_tweet.parent().addClass( ( is_itself ) ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
                     // ※ article[role="article"] は頻繁に書き換わることがあるため、比較的安定な parent() に class を設定
-                    tweet_url_info = parse_individual_tweet_url( $tweet_link.attr( 'href' ) );
                 
-                if ( ! stop_scrolling_request ) {
-                    $( w ).scrollTop( $tweet_link.offset().top - ( $( w ).height() / 2 ) ); // 1 ツイートずつスクロールさせる
-                }
+                found_tweet_info = {
+                    is_itself : is_itself,
+                    tweet_url : $found_tweet.find( 'a[role="link"]:has(time[datetime])' ).attr( 'href' ),
+                    retweeter_screen_name : get_retweeter_screen_name( $found_tweet ),
+                };
                 
-                if ( ! tweet_url_info ) {
-                    return;
-                }
+                start_adjust_handler();
                 
-                var current_tweet_id = tweet_url_info.tweet_id,
-                    current_reacted_tweet_info = get_reacted_tweet_info( current_tweet_id ),
-                    current_retweeter_screen_name = get_retweeter_screen_name( $tweet ),
-                    current_reacted_info = ( current_retweeter_screen_name ) ? ( current_reacted_tweet_info.rt_info_map.screen_name_map[ current_retweeter_screen_name ] || current_reacted_tweet_info ) : current_reacted_tweet_info,
-                    current_target_id = current_reacted_info.id,
-                    current_timestamp_ms = current_reacted_info.timestamp_ms;
+                log_debug( '[target tweet was found] is_self:', is_itself, 'tweet:', $found_tweet, 'contaner:', $found_tweet_container );
                 
-                if ( target_info.id ) {
-                    if ( current_target_id == target_info.id ) {
-                        is_itself = true;
-                        $found_tweet = $tweet;
-                        
-                        return false;
-                    }
-                    
-                    if ( bignum_cmp( current_target_id, target_info.id ) < 0 ) {
-                        is_itself = false;
-                        $found_tweet = $tweet;
-                        
-                        return false;
-                    }
-                }
-                else {
-                    if ( current_tweet_id == reacted_tweet_info.id ) {
-                        is_itself = true;
-                        $found_tweet = $tweet;
-                        
-                        return false;
-                    }
-                    
-                    if ( current_timestamp_ms <= threshold_timestamp_ms ) {
-                        is_itself = false;
-                        $found_tweet = $tweet;
-                        
-                        return false;
-                    }
-                    
-                    if ( bignum_cmp( current_target_id, reacted_tweet_info.id ) < 0 ) {
-                        is_itself = false;
-                        $found_tweet = $tweet;
-                        
-                        return false;
-                    }
-                }
-            } );
-            
-            if ( $found_tweet.length <= 0 ) {
-                // TODO: 目的のツイートがあるにもかかわらず、通り過ぎることがあった
-                // →上のループ内で 1 ツイートずつスクロールさせることで改善されることを期待
-                // 見つからなかった場合、強制スクロール
-                /*
-                //if ( stop_scrolling_request ) {
-                //    return $();
-                //}
-                //
-                ////$( w ).scrollTop( $( d ).height() );
-                //$( animate_target_selector ).animate( {
-                //    //scrollTop : ( 0 < $tweet_links.length ) ? $tweet_links.last().offset().top : $( d ).height(), // →こちらだと無限ループする可能性あり
-                //    scrollTop : $( d ).height(),
-                //}, animate_speed );
-                */
-                
-                return $();
-            }
-            
-            var $found_tweet_container = $found_tweet.parent().addClass( ( is_itself ) ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
-                // ※ article[role="article"] は頻繁に書き換わることがあるため、比較的安定な parent() に class を設定
-            
-            found_tweet_info = {
-                is_itself : is_itself,
-                tweet_url : $found_tweet.find( 'a[role="link"]:has(time[datetime])' ).attr( 'href' ),
-                retweeter_screen_name : get_retweeter_screen_name( $found_tweet ),
+                return $found_tweet_container;
             };
-            
-            start_adjust_handler();
-            
-            log_debug( '[target tweet was found] is_self:', is_itself, 'tweet:', $found_tweet, 'contaner:', $found_tweet_container );
-            
-            return $found_tweet_container;
-        }, // end of search_tweet()
+        } )(), // end of search_tweet()
         
         [
             start_adjust_handler,
