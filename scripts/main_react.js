@@ -943,7 +943,8 @@ var open_child_window = ( () => {
                 child_window.name = name;
             }
             if ( child_window.location.href != url ) {
-                child_window.location.href = url;
+                //child_window.location.href = url;
+                child_window.location.replace( url );
             }
         }
         else {
@@ -971,8 +972,15 @@ var open_search_window = ( () => {
             search_url = search_parameters.search_url = search_parameters.search_timeline_url = search_url_template.replace( /#SEARCH_QUERY_ENCODED#/g, encodeURIComponent( search_query ) ),
             test_tweet_id = ( target_info.id ) ? target_info.id : get_tweet_id_from_utc_sec( target_timestamp_ms / 1000.0 ),
             
+            //ポップアップブロック対策
+            //child_window = open_child_window( '', '_blank' ),
+            //TODO: うまく動作しない
+            //※ Firefox では、Promise（fetch_user_timeline()）内で、InternalError: "Promise rejection value is a non-unwrappable cross-compartment wrapper." が発生
+            child_window = open_child_window( target_info.tweet_url, '_blank' ),
+            
             open_search_page = () => {
                 open_child_window( search_parameters.search_url, {
+                    existing_window : child_window,
                     search_parameters : search_parameters,
                 } );
             };
@@ -1086,7 +1094,9 @@ var create_vicinity_link_container = ( function () {
                 event_element = $link.attr( 'data-event_element' ) || '',
                 tweet_id = $link.attr( 'data-self_tweet_id' ),
                 reacted_tweet_info = get_reacted_tweet_info( tweet_id ),
-                target_info = {};
+                target_info = {
+                    tweet_url : tweet_url,
+                };
             
             if ( ! reacted_tweet_info ) {
                 reacted_tweet_info = {
