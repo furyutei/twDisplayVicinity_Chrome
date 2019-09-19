@@ -25,8 +25,7 @@ var OPTIONS = {
     VICINITY_TWEET_COLOR_NIGHTMODE : '#440044', // 近傍ツイートの色（夜間モード）
     
     USE_LINK_ICON : true, // 近傍リンクの種類（true: アイコンを使用 ／ false: 文字を使用(未対応)
-    
-    //TODO: 文字リンクは未対応（レイアウトが難しいため）
+    //TODO: 文字リンクはレイアウトが難しいため、現在未対応
     //LINK_COLOR : 'inherit', // 近傍リンクの色('darkblue'→'inherit')
     //ACT_LINK_COLOR : 'inherit', // 通知リンクの色('indigo'→'inherit')
     
@@ -116,6 +115,12 @@ if ( IS_TOUCHED ) {
     return;
 }
 
+if ( new RegExp( '[?&]_temporary_page=' + SCRIPT_NAME + '(?:&|$)' ).test( location.href ) ) {
+    // ポップアップブロック対策用暫定ページの場合は表示を隠す
+    $( d.body ).hide();
+    return;
+}
+
 //}
 
 
@@ -180,9 +185,10 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     // TODO: 継続して使えるかどうか不明→変更された場合の対応を要検討
     // ※ https://abs.twimg.com/responsive-web/web/main.<version>.js (例：https://abs.twimg.com/responsive-web/web/main.007c24006b6719434.js) 内で定義されている値
     // ※ これを使用しても、一定時間内のリクエスト回数に制限有り→参考；[TwitterのAPI制限 [2019/05/31現在] - Qiita](https://qiita.com/mpyw/items/32d44a063389236c0a65)
-    API_STATUSES_RETWEETS_TEMPLATE = 'https://api.twitter.com/1.1/statuses/retweets/#TWEET_ID#.json?count=#COUNT#',
-    API_USER_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/statuses/user_timeline.json?count=#COUNT#&include_my_retweet=1&include_rts=1&user_id=#USER_ID#&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
     
+    API_USER_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/statuses/user_timeline.json?count=#COUNT#&include_my_retweet=1&include_rts=1&user_id=#USER_ID#&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
+    API_SEARCH_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/search/universal.json?q=#QUERY#&count=#COUNT#&modules=status&result_type=recent&pc=false&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
+    API_STATUSES_RETWEETS_TEMPLATE = 'https://api.twitter.com/1.1/statuses/retweets/#TWEET_ID#.json?count=#COUNT#',
     
     VICINITY_LINK_CONTAINER_CLASS = SCRIPT_NAME + '_vicinity_link_container',
     SELF_CONTAINER_CLASS = SCRIPT_NAME + '_vicinity_link_container_self',
@@ -194,7 +200,7 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     
     OBSERVATION_WRAPPER_ID = SCRIPT_NAME + '-observation_wrapper',
     
-    ACT_SEARCH_OFFSET_SEC = 60 * 60, // ユーザーアクション（リツイート／いいね）通知近傍検索の際に、通知時間から遡るオフセット値(秒)
+    RETWEET_SEARCH_OFFSET_SEC = 24 * 60 * 60, // ユーザーアクション（リツイート／いいね）通知近傍検索の際に、通知時間から遡るオフセット値(秒)
     
     WAIT_DOM_REFRESH_MS = 100, // 通信データ通知→DOM更新待ち時間(単位：ms)
     WAIT_BEFORE_GIVEUP_SCROLL_SEC = 30, // 強制スクロールさせてタイムラインの続きを読み込む際に、いつまでも変化が見られず、諦めるまでの時間(単位:秒)
@@ -203,8 +209,14 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     ADJUST_CHECK_INTERVAL_MS = 100, // 同・チェック間隔(単位：ms)
     ADJUST_ACCEPTABLE_NUMBER = 3, // 同・ツイートのスクロール位置が安定するまでの回数（連続してADJUST_ACCEPTABLE_NUMBER回一致すれば安定したとみなす）
     
-    LIMIT_STATUSES_RETWEETS_USER_NUMBER = 100, // statuses/retweets のユーザー数制限
-    DEFAULT_STATUSES_RETWEETS_USER_NUMBER = 30, // statuses/retweets のデフォルトユーザー数
+    LIMIT_USER_TIMELINE_TWEET_NUMBER = 40, // statuses/user_timeline の最大取得ツイート数
+    DEFAULT_USER_TIMELINE_TWEET_NUMBER = 20, // statuses/user_timeline のデフォルト取得ツイート数
+    
+    LIMIT_SEARCH_TIMELINE_TWEET_NUMBER = 40, // search/universal の最大取得ツイート数
+    DEFAULT_SEARCH_TIMELINE_TWEET_NUMBER = 20, // search/universal のデフォルト取得ツイート数
+    
+    LIMIT_STATUSES_RETWEETS_USER_NUMBER = 100, // statuses/retweets の最大取得ユーザー数
+    DEFAULT_STATUSES_RETWEETS_USER_NUMBER = 30, // statuses/retweets のデフォルト取得ユーザー数
     
     LIMIT_MAX_AFTER_RETWEET_MINUTES = 60, // リツイート後のツイート取得時間(分)制限
     DEFAULT_MAX_AFTER_RETWEET_MINUTES = 10, // リツイート後のツイート取得時間(分)デフォルト
@@ -747,147 +759,16 @@ var parse_individual_tweet_url = ( () => {
 
 function get_retweeter_link( $tweet ) {
     //return $tweet.find( 'a[role="link"]:not([href^="/i/"]):has(>span>span[dir="ltr"]>span)' ); // ←だと、自分自身がリツイートした場合に合致しない
-    return $tweet.find( 'a[role="link"]:not([href^="/i/"]):has(>span>span)' );
+    //return $tweet.find( 'a[role="link"]:not([href^="/i/"]):has(>span>span)' );
+    return $( $tweet.get( 0 ).querySelector( 'a[role="link"]:not([href^="/i/"])' ) ).filter( function () {
+        return ( 0 < $( this ).children('span').children('span').length );
+    } );
 } // end of get_retweeter_link()
 
 
 function get_retweeter_screen_name( $tweet ) {
     return ( get_retweeter_link( $tweet ).attr( 'href' ) || '' ).replace( /^\//, '' );
 } // end of get_retweeter_screen_name()
-
-
-var get_shortcut_keys = ( () => {
-    var shortcut_keys = null;
-    
-    return () => {
-        if ( shortcut_keys ) {
-            return shortcut_keys;
-        }
-        
-        try {
-            shortcut_keys = JSON.parse( $( 'div[data-at-shortcutkeys]' ).attr( 'data-at-shortcutkeys' ) );
-        }
-        catch ( error ) {
-            shortcut_keys = null;
-            return {};
-        }
-        return shortcut_keys;
-    };
-} )(); // end of get_shortcut_keys()
-
-
-function get_event_element_from_title( title ) {
-    // TODO: https://twitter.com/i/timeline のページ種別（「リツイートされました」「いいねされました」等）判別が困難（多国語対応のため）
-    // →暫定的に、キーボードショートカットを元に、document.title に一致するものを探して判別
-    // → /2/notifications/all.json で取得された title が document.title のものと一致するかによってイベント種別を判別できるようになったため、get_event_element_from_title() は現状未使用
-    
-    if ( ! title ) {
-        title = d.title;
-    }
-    
-    var retweet_string = get_shortcut_keys()[ 't' ],
-        like_string = get_shortcut_keys()[ 'l' ];
-    
-    if ( ( ! retweet_string ) || ( ! like_string ) ) {
-        return 'unknown_event';
-    }
-    
-    if ( title.match( retweet_string ) ) {
-        return 'user_retweeted_tweet';
-    }
-    else if ( title.match( like_string ) ) {
-        return 'user_liked_tweet';
-    }
-    else {
-        return 'unknown_event';
-    }
-    
-} // end of get_event_element_from_title()
-
-
-function api_get_csrf_token() {
-    var csrf_token;
-    
-    try {
-        csrf_token = document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ];
-    }
-    catch ( error ) {
-    }
-    
-    return csrf_token;
-} // end of api_get_csrf_token()
-
-
-function fetch_json( url, options ) {
-    log_debug( 'fetch_json()', url, options );
-    
-    if ( ( ! DOMAIN_PREFIX ) || ( IS_FIREFOX ) ) {
-        return fetch( url, options ).then( response => response.json() );
-    }
-    
-    /*
-    // mobile.twitter.com 等から api.twitter.com を呼ぶと、
-    // > Cross-Origin Read Blocking (CORB) blocked cross-origin response <url> with MIME type application/json. See https://www.chromestatus.com/feature/5629709824032768 for more details.
-    // のような警告が出て、レスポンスボディが空になってしまう
-    // 参考：
-    //   [Changes to Cross-Origin Requests in Chrome Extension Content Scripts - The Chromium Projects](https://www.chromium.org/Home/chromium-security/extension-content-script-fetches)
-    //   [Cross-Origin Read Blocking (CORB) とは - ASnoKaze blog](https://asnokaze.hatenablog.com/entry/2018/04/10/205717)
-    */
-    
-    return new Promise( ( resolve, reject ) => {
-        chrome.runtime.sendMessage( {
-            type : 'FETCH_JSON',
-            url : url,
-            options : options,
-        }, function ( response ) {
-            log_debug( 'FETCH_JSON => response', response );
-            
-            if ( response.error ) {
-                reject( response.error );
-                return;
-            }
-            resolve( response.json );
-            // TODO: シークレット(incognito)モードだと、{"errors":[{"code":353,"message":"This request requires a matching csrf cookie and header."}]} のように返されてしまう
-            // → manifest.json に『"incognito" : "split"』が必要だが、煩雑になる(Firefoxでは manifest.json 読み込み時にエラーとなる)ため、保留
-        } );
-    } );
-} // end of fetch_json()
-
-
-function fetch_user_timeline( user_id, max_id, count ) {
-    var api_url = API_USER_TIMELINE_TEMPLATE.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, ( count ? count : 20 ) ) + ( ( max_id && /^\d+$/.test( max_id ) ) ? '&max_id=' + max_id : '' );
-    
-    return fetch_json( api_url, {
-        method : 'GET',
-        headers : {
-            'authorization' : 'Bearer ' + API_AUTHORIZATION_BEARER,
-            'x-csrf-token' : api_get_csrf_token(),
-            'x-twitter-active-user' : 'yes',
-            'x-twitter-auth-type' : 'OAuth2Session',
-            'x-twitter-client-language' : LANGUAGE,
-        },
-        mode: 'cors',
-        credentials: 'include',
-    } );
-} // end of fetch_user_timeline()
-
-
-function fetch_retweets( tweet_id, max_user_count ) {
-    var api_url = API_STATUSES_RETWEETS_TEMPLATE.replace( /#TWEET_ID#/g, tweet_id ).replace( /#COUNT#/g, max_user_count );
-    
-    return fetch_json( api_url, {
-        method : 'GET',
-        headers : {
-            'authorization' : 'Bearer ' + API_AUTHORIZATION_BEARER,
-            'x-csrf-token' : api_get_csrf_token(),
-            'x-twitter-active-user' : 'yes',
-            'x-twitter-auth-type' : 'OAuth2Session',
-            'x-twitter-client-language' : LANGUAGE,
-        },
-        mode: 'cors',
-        credentials: 'include',
-    } );
-} // end of fetch_retweets()
 
 
 var [
@@ -956,6 +837,931 @@ var open_child_window = ( () => {
 } )(); // end of open_child_window()
 
 
+//{ Twitter API コール関連
+var [
+    fetch_user_timeline,
+    fetch_search_timeline,
+    fetch_retweets,
+] = ( () => {
+    var api_get_csrf_token = () => {
+            var csrf_token;
+            
+            try {
+                csrf_token = document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ];
+            }
+            catch ( error ) {
+            }
+            
+            return csrf_token;
+        }, // end of api_get_csrf_token()
+        
+        create_api_header = () => {
+            return {
+                'authorization' : 'Bearer ' + API_AUTHORIZATION_BEARER,
+                'x-csrf-token' : api_get_csrf_token(),
+                'x-twitter-active-user' : 'yes',
+                'x-twitter-auth-type' : 'OAuth2Session',
+                'x-twitter-client-language' : LANGUAGE,
+            };
+        },
+        
+        fetch_json = ( url, options ) => {
+            log_debug( 'fetch_json()', url, options );
+            
+            if ( ( ! DOMAIN_PREFIX ) || ( IS_FIREFOX ) ) {
+                return fetch( url, options ).then( response => response.json() );
+            }
+            
+            /*
+            // mobile.twitter.com 等から api.twitter.com を呼ぶと、
+            // > Cross-Origin Read Blocking (CORB) blocked cross-origin response <url> with MIME type application/json. See https://www.chromestatus.com/feature/5629709824032768 for more details.
+            // のような警告が出て、レスポンスボディが空になってしまう
+            // 参考：
+            //   [Changes to Cross-Origin Requests in Chrome Extension Content Scripts - The Chromium Projects](https://www.chromium.org/Home/chromium-security/extension-content-script-fetches)
+            //   [Cross-Origin Read Blocking (CORB) とは - ASnoKaze blog](https://asnokaze.hatenablog.com/entry/2018/04/10/205717)
+            */
+            
+            return new Promise( ( resolve, reject ) => {
+                chrome.runtime.sendMessage( {
+                    type : 'FETCH_JSON',
+                    url : url,
+                    options : options,
+                }, function ( response ) {
+                    log_debug( 'FETCH_JSON => response', response );
+                    
+                    if ( response.error ) {
+                        reject( response.error );
+                        return;
+                    }
+                    resolve( response.json );
+                    // TODO: シークレット(incognito)モードだと、{"errors":[{"code":353,"message":"This request requires a matching csrf cookie and header."}]} のように返されてしまう
+                    // → manifest.json に『"incognito" : "split"』が必要だが、煩雑になる(Firefoxでは manifest.json 読み込み時にエラーとなる)ため、保留
+                } );
+            } );
+        }, // end of fetch_json()
+        
+        fetch_user_timeline = ( user_id, max_id, count ) => {
+            if ( isNaN( count ) || ( count < 0 ) || ( LIMIT_USER_TIMELINE_TWEET_NUMBER < count ) ) {
+                count = DEFAULT_USER_TIMELINE_TWEET_NUMBER;
+            }
+            
+            var api_url = API_USER_TIMELINE_TEMPLATE.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, count ) + ( /^\d+$/.test( max_id || '' ) ? '&max_id=' + max_id : '' );
+            
+            return fetch_json( api_url, {
+                method : 'GET',
+                headers : create_api_header(),
+                mode: 'cors',
+                credentials: 'include',
+            } );
+        }, // end of fetch_user_timeline()
+        
+        fetch_search_timeline = ( query, count ) => {
+            if ( isNaN( count ) || ( count < 0 ) || ( LIMIT_SEARCH_TIMELINE_TWEET_NUMBER < count ) ) {
+                count = DEFAULT_SEARCH_TIMELINE_TWEET_NUMBER;
+            }
+            
+            var api_url = API_SEARCH_TIMELINE_TEMPLATE.replace( /#QUERY#/g, encodeURIComponent( query ) ).replace( /#COUNT#/g, count );
+            
+            return fetch_json( api_url, {
+                method : 'GET',
+                headers : create_api_header(),
+                mode: 'cors',
+                credentials: 'include',
+            } );
+        }, // end of fetch_search_timeline()
+        
+        fetch_retweets = ( tweet_id, max_user_count ) => {
+            if ( isNaN( max_user_count ) || ( max_user_count < 0 ) || ( LIMIT_STATUSES_RETWEETS_USER_NUMBER < max_user_count ) ) {
+                max_user_count = DEFAULT_STATUSES_RETWEETS_USER_NUMBER;
+            }
+            
+            var api_url = API_STATUSES_RETWEETS_TEMPLATE.replace( /#TWEET_ID#/g, tweet_id ).replace( /#COUNT#/g, max_user_count );
+            
+            return fetch_json( api_url, {
+                method : 'GET',
+                headers : create_api_header(),
+                mode: 'cors',
+                credentials: 'include',
+            } );
+        }; // end of fetch_retweets()
+        
+    return [
+        fetch_user_timeline,
+        fetch_search_timeline,
+        fetch_retweets,
+    ];
+} )();
+//}
+
+
+//{ ユーザーアクションイベントデータ取得関連
+//  TODO: ユーザーアクション→HTTP Requestまで時間がかかるため、リアルタイム取得は困難
+//  →現状未使用
+var [
+        analyze_client_event,
+        get_last_client_event,
+        get_client_event_log_list,
+] = ( () => {
+    var client_event_log_list = [],
+        max_client_event_log_number = 100,
+        
+        reg_client_event_url = /^\/1\.1\/jot\/client_event\.json/;
+    
+    function analyze_client_event( url, request_body ) {
+        var url_path = new URL( url ).pathname;
+        
+        if ( ! reg_client_event_url.test( url_path ) ) {
+            return;
+        }
+        
+        if ( ( ! ( request_body || '' ).match( /(?:^|&)log=(.+?)(?:&|$)/ ) ) ) {
+            return;
+        }
+        
+        var log_list = JSON.parse( decodeURIComponent( RegExp.$1 ) ),
+            click_event_log_list = log_list.filter( ( log ) => {
+                return ( ( ! isNaN( log.client_event_sequence_number ) ) && log.event_namespace && ( ( log._category_ == 'click_event' ) || ( log.event_namespace.action == 'navigate' ||  log.event_namespace.action == 'click' ) ) );
+            } );
+        
+        client_event_log_list = client_event_log_list.concat( click_event_log_list ).slice( -max_client_event_log_number );
+    } // end of analyze_client_event()
+    
+    
+    function get_last_client_event( action ) {
+        if ( ! action ) {
+            return client_event_log_list.slice( -1 )[ 0 ];
+        }
+        
+        return client_event_log_list.slice( 0 ).reverse().find( log => ( log.event_namespace && ( log.event_namespace.action == action ) ) );
+    } // end of get_last_client_event()
+    
+    
+    function get_client_event_log_list() {
+        return client_event_log_list;
+    } // end of get_client_event_log_list()
+    
+    return [
+        analyze_client_event,
+        get_last_client_event,
+        get_client_event_log_list,
+    ];
+} )();
+//}
+
+
+//{ Twitter API 応答取得処理関連
+var [
+    analyze_capture_result,
+    update_tweet_info_from_user_timeline,
+    update_tweet_info_from_search_timeline,
+    update_tweet_retweeters_info,
+    get_stored_tweet_info,
+    get_stored_tweet_info_map,
+    get_event_element_from_title,
+    get_event_title_info_map,
+] = ( () => {
+    var reg_api_2 = /^\/2\//,
+        reg_home_timeline_url = /^\/2\/timeline\/home\.json/,
+        reg_conversation_url = /^\/2\/timeline\/conversation\/(\d+)\.json/,
+        reg_user_timeline_url = /^\/2\/timeline\/(profile|media|favorites)\/(\d+)\.json/,
+        reg_search_url = /^\/2\/search\/adaptive\.json/,
+        reg_bookmark_timeline_url = /^\/2\/timeline\/bookmark.json/,
+        reg_retweeted_by_url = /^\/2\/timeline\/retweeted_by\.json/,
+        reg_notification_all_url = /^\/2\/notifications\/all\.json/,
+        reg_notification_view_url = /^\/2\/notifications\/view\/([^\/]+)\.json/,
+        
+        reg_capture_url_list = [
+            reg_api_2,
+        ],
+        
+        tweet_info_map = {},
+        notification_info_map = {},
+        event_title_info_map = {};
+    
+    function analyze_capture_result( url, json ) {
+        var url_path = new URL( url ).pathname,
+            globalObjects = ( json || {} ).globalObjects;
+        
+        if ( ( ! reg_capture_url_list.some( reg_capture_url => reg_capture_url.test( url_path ) ) ) || ( ! globalObjects ) ) {
+            return;
+        }
+        
+        var timeline = json.timeline,
+            tweets = globalObjects.tweets,
+            users = globalObjects.users,
+            notifications = globalObjects.notifications,
+            
+            get_tweet_info = ( tweet_id ) => {
+                var tweet = tweets[ tweet_id ],
+                    tweet_info = tweet_info_map[ tweet_id ] = tweet_info_map[ tweet_id ] || {
+                        rt_info_map : { tweet_id_map : {}, user_id_map : {}, screen_name_map : {} },
+                        like_info_map : { user_id_map : {}, screen_name_map : {} },
+                    },
+                    user_id = tweet.user_id_str,
+                    user = users[ user_id ];
+                
+                Object.assign( tweet_info, {
+                    id : tweet_id,
+                    user_id : user_id,
+                    screen_name : user.screen_name,
+                    user_name : user.name,
+                    timestamp_ms : Date.parse( tweet.created_at ),
+                    reacted_id : tweet.retweeted_status_id_str,
+                    tweet : tweet,
+                } );
+                
+                return tweet_info;
+            },
+            
+            get_add_entries = () => {
+                try {
+                    return ( ( timeline && timeline.instructions ) || [] ).filter( ( instruction ) => instruction.addEntries )[ 0 ].addEntries.entries;
+                }
+                catch ( error ) {
+                    return [];
+                }
+            },
+            
+            analyze_tweet_info = () => {
+                if ( ( ! tweets ) || ( ! users ) ) {
+                    return;
+                }
+                var update = ( tweet ) => {
+                    var tweet_id = tweet.id_str,
+                        tweet_info = get_tweet_info( tweet_id ),
+                        reacted_id = tweet_info.reacted_id;
+                    
+                    if ( ! reacted_id ) {
+                        return;
+                    }
+                    
+                    var retweeted_tweet_info = get_tweet_info( reacted_id ),
+                        user_id = tweet_info.user_id,
+                        screen_name = tweet_info.screen_name,
+                        rt_info = {
+                            id : tweet_id,
+                            user_id : user_id,
+                            screen_name : screen_name,
+                            user_name : tweet_info.user_name,
+                            timestamp_ms : tweet_info.timestamp_ms,
+                        },
+                        rt_info_map = retweeted_tweet_info.rt_info_map;
+                    
+                    rt_info_map.tweet_id_map[ tweet_id ] = rt_info_map.user_id_map[ user_id ] = rt_info_map.screen_name_map[ screen_name ] = rt_info;
+                };
+                
+                for ( var [ key, tweet ] of Object.entries( tweets ) ) {
+                    update( tweet );
+                }
+            }, // end of analyze_tweet_info()
+            
+            analyze_retweeted_tweet_info = () => {
+                if ( ! reg_retweeted_by_url.test( new URL( url ).pathname ) ) {
+                    return;
+                }
+                
+                if ( ( ! users ) || ( ! timeline ) || ( ! ( timeline.id || '' ).match( /^Retweeters-(\d+)$/ ) ) ) {
+                    return;
+                }
+                
+                var tweet_id = RegExp.$1,
+                    reacted_tweet_info = get_stored_tweet_info( tweet_id );
+                
+                if ( ! reacted_tweet_info ) {
+                    return;
+                }
+                
+                // ※ /2/timeline/retweeted_by だとリツイートIDや時間が取得できない→ /1.1/statuses/retweets で取得しなおす
+                /*
+                //var reacted_info_map = reacted_tweet_info.rt_info_map,
+                //    entries = get_add_entries();
+                //
+                //entries.forEach( ( entry ) => {
+                //    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^user-(.+)$/ ) ) ) {
+                //        return;
+                //    }
+                //    
+                //    var user_id = RegExp.$1,
+                //        timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
+                //        user = users[ user_id ],
+                //        screen_name = user.screen_name,
+                //        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                //        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
+                //        reacted_info = {
+                //            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
+                //            user_id : user_id,
+                //            screen_name : screen_name,
+                //            user_name : user.name,
+                //            timestamp_ms : ( existing_reacted_info && ( existing_reacted_info.timestamp_ms < timestamp_ms ) ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
+                //        };
+                //    
+                //    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                //} );
+                */
+                update_tweet_retweeters_info( tweet_id, {
+                    callback : ( params ) => {
+                        log_debug( 'update_tweet_retweeters_info() callback(): params=', params );
+                    },
+                    max_user_count : LIMIT_STATUSES_RETWEETS_USER_NUMBER,
+                    cache_sec : 0, // キャッシュは使用しない
+                } );
+                
+            }, // end of analyze_retweeted_tweet_info()
+            
+            analyze_notification_all_info = () => {
+                if ( ! reg_notification_all_url.test( new URL( url ).pathname ) ) {
+                    return;
+                }
+                
+                if ( ( ! tweets ) || ( ! users ) || ( ! notifications ) ) {
+                    return;
+                }
+                
+                var entries = get_add_entries();
+                
+                entries.forEach( ( entry ) => {
+                    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^notification-(.+)$/ ) ) ) {
+                        return;
+                    }
+                    
+                    var content = entry.content.item.content,
+                        clientEventInfo = entry.content.item.clientEventInfo;
+                    
+                    if ( ! content.notification ) {
+                        // content.tweet / clientEventInfo.element = 'user_replied_to_your_tweet' 等については未対応
+                        return;
+                    }
+                    
+                    var notification_id = content.notification.id, // ^notification-(.+)$ の数値部分と同じ
+                        notification = notifications[ notification_id ],
+                        event_element = clientEventInfo.element;
+                    
+                    if ( ( ! notification ) || ( ! is_reacted_event_element( event_element ) ) ) {
+                        return;
+                    }
+                    
+                    var notification_info = notification_info_map[ notification_id ] = notification_info_map[ notification_id ] || {},
+                        event_title = content.notification.url.urtEndpointOptions.title,
+                        timestamp_ms = 1 * notification.timestampMs, // 1 * entry.sortIndex と同じ
+                        targetObjects = notification.template.aggregateUserActionsV1.targetObjects,
+                        fromUsers = notification.template.aggregateUserActionsV1.fromUsers;
+                    
+                    event_title_info_map[ event_element ] = {
+                        event_element : event_element,
+                        event_title : event_title,
+                    };
+                    
+                    Object.assign( notification_info, {
+                        id : notification_id,
+                        event_element : event_element,
+                        timestamp_ms : timestamp_ms,
+                        event_title : event_title, // https://twitter.com/i/timeline の [data-testid="primaryColumn"] h2[role="heading"] に入る
+                        content : content,
+                        clientEventInfo : clientEventInfo,
+                        notification : notification,
+                    } );
+                    
+                    targetObjects.forEach( ( targetObject ) => {
+                        var tweet_id = targetObject.tweet.id,
+                            reacted_tweet_info = get_stored_tweet_info( tweet_id ),
+                            reacted_info_map = ( is_retweeted_event_element( event_element ) ) ? reacted_tweet_info.rt_info_map : reacted_tweet_info.like_info_map;
+                        
+                        fromUsers.forEach( ( fromUser ) => {
+                            var user_id = fromUser.user.id,
+                                user = users[ user_id ],
+                                screen_name = user.screen_name,
+                                existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                                // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
+                                reacted_info = {
+                                    id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
+                                    user_id : user_id,
+                                    screen_name : screen_name,
+                                    user_name : user.name,
+                                    timestamp_ms : ( existing_reacted_info && existing_reacted_info.timestamp_ms ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
+                                    event_element : event_element,
+                                    event_title : event_title,
+                                    notification_info : notification_info,
+                                };
+                            
+                            reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                        } );
+                    } );
+                } );
+            }, // end of analyze_notification_all_info()
+            
+            analyze_notification_info = () => {
+                if ( ( ! tweets ) || ( ! users ) ) {
+                    return;
+                }
+                
+                if ( ! new URL( url ).pathname.match( reg_notification_view_url ) ) {
+                    return;
+                }
+                
+                var notification_id = RegExp.$1,
+                    notification_info = notification_info_map[ notification_id ],
+                    event_element;
+                
+                if ( notification_info && notification_info.clientEventInfo ) {
+                    event_element = notification_info.clientEventInfo.element; // 'users_retweeted_your_tweet', 'users_liked_your_tweet' 等
+                }
+                else {
+                    event_element = get_event_element_from_title();
+                }
+                
+                if ( ! is_reacted_event_element( event_element ) ) {
+                    return;
+                }
+                
+                var entries = get_add_entries(),
+                    filtered_entries = [],
+                    reg_main_tweet = /^main-tweet-(\d+)$/,
+                    reg_main_user = /^main-user-(\d+)$/,
+                    reg_user = /^user-(\d+)$/,
+                    reg_tweet = /^tweet-(\d+)$/,
+                    main_tweet_id,
+                    main_user_id;
+                
+                filtered_entries = entries.filter( ( entry ) => {
+                    var entryId = entry.entryId;
+                    
+                    if ( ! entryId ) {
+                        return false;
+                    }
+                    
+                    if ( entryId.match( reg_main_tweet ) ) {
+                        main_tweet_id = RegExp.$1;
+                        return false;
+                    }
+                    
+                    if ( entryId.match( reg_main_user ) ) {
+                        main_user_id = RegExp.$1;
+                        return false;
+                    }
+                    
+                    return true;
+                } );
+                
+                if ( ! ( main_tweet_id || main_user_id ) ) {
+                    return;
+                }
+                
+                filtered_entries.forEach( ( entry ) => {
+                    var entryId = entry.entryId,
+                        reg_id = ( main_tweet_id ) ? reg_user : reg_tweet,
+                        tweet_id,
+                        user_id;
+                    
+                    if ( main_tweet_id ) {
+                        if ( ! entryId.match( reg_user ) ) {
+                            return;
+                        }
+                        user_id = RegExp.$1;
+                        tweet_id = main_tweet_id;
+                    }
+                    else {
+                        if ( ! entryId.match( reg_tweet ) ) {
+                            return;
+                        }
+                        tweet_id = RegExp.$1;
+                        user_id = main_user_id;
+                    }
+                    
+                    var reacted_tweet_info = get_tweet_info( tweet_id ),
+                        reacted_info_map = ( is_retweeted_event_element( event_element ) ) ? reacted_tweet_info.rt_info_map : reacted_tweet_info.like_info_map,
+                        user = users[ user_id ],
+                        screen_name = user.screen_name,
+                        timestamp_ms = 1 * entry.sortIndex,
+                        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
+                        reacted_info = {
+                            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
+                            user_id : user_id,
+                            screen_name : screen_name,
+                            user_name : user.name,
+                            timestamp_ms : ( existing_reacted_info && existing_reacted_info.timestamp_ms ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
+                            event_element : event_element,
+                            event_title : event_title_info_map[ event_element ].event_title,
+                            notification_info : notification_info,
+                        };
+                    
+                    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                } );
+            }; // end of analyze_notification_info()
+            
+        analyze_tweet_info();
+        analyze_retweeted_tweet_info();
+        analyze_notification_all_info();
+        analyze_notification_info();
+        
+    } // end of analyze_capture_result();
+    
+    
+    // API1.1 用
+    var [
+        update_tweet_info_from_user_timeline,
+        update_tweet_info_from_search_timeline,
+        update_tweet_retweeters_info,
+    ] = ( () => {
+        var get_tweet_info = ( src_tweet ) => {
+                var tweet_id = src_tweet.id_str,
+                    tweet_info = tweet_info_map[ tweet_id ] = tweet_info_map[ tweet_id ] || {
+                        rt_info_map : { tweet_id_map : {}, user_id_map : {}, screen_name_map : {} },
+                        like_info_map : { user_id_map : {}, screen_name_map : {} },
+                    },
+                    src_user = src_tweet.user,
+                    src_retweeted_status = src_tweet.retweeted_status || {},
+                    dst_tweet = Object.assign( {}, src_tweet );
+                
+                delete dst_tweet.user;
+                delete dst_tweet.retweeted_status;
+                delete dst_tweet.quoted_status;
+                
+                Object.assign( tweet_info, {
+                    id : tweet_id,
+                    user_id : src_user.id_str,
+                    screen_name : src_user.screen_name,
+                    user_name : src_user.name,
+                    timestamp_ms : Date.parse( src_tweet.created_at ),
+                    reacted_id : src_retweeted_status.id_str,
+                    tweet : dst_tweet,
+                } );
+                
+                return tweet_info;
+            },
+            
+            update_retweeted_tweet_info = ( tweet_info, retweeted_tweet_info ) => {
+                var tweet_id = tweet_info.id,
+                    user_id = tweet_info.user_id,
+                    screen_name = tweet_info.screen_name,
+                    rt_info = {
+                        id : tweet_id,
+                        user_id : user_id,
+                        screen_name : screen_name,
+                        user_name : tweet_info.user_name,
+                        timestamp_ms : tweet_info.timestamp_ms,
+                    },
+                    rt_info_map = retweeted_tweet_info.rt_info_map;
+                
+                rt_info_map.tweet_id_map[ tweet_id ] = rt_info_map.user_id_map[ user_id ] = rt_info_map.screen_name_map[ screen_name ] = rt_info;
+            },
+            
+            update_tweet_info = ( src_tweet ) => {
+                var src_reacted_status = src_tweet.retweeted_status,
+                    src_quoted_status = src_tweet.quoted_status,
+                    tweet_info = get_tweet_info( src_tweet ),
+                    tweet_id = tweet_info.id,
+                    retweeted_tweet_info,
+                    quoted_tweet_info,
+                    
+                    updated_tweet_info_map = {},
+                    retweeted_tweet_id_map = {};
+                
+                updated_tweet_info_map[ tweet_id ] = tweet_info;
+                
+                if ( src_reacted_status ) {
+                    retweeted_tweet_info = get_tweet_info( src_reacted_status );
+                    updated_tweet_info_map[ retweeted_tweet_info.id ] = retweeted_tweet_info;
+                    
+                    update_retweeted_tweet_info( tweet_info, retweeted_tweet_info );
+                    retweeted_tweet_id_map[ tweet_info.id ] = retweeted_tweet_info.id;
+                }
+                
+                if ( src_quoted_status ) {
+                    quoted_tweet_info = get_tweet_info( src_quoted_status );
+                    updated_tweet_info_map[ quoted_tweet_info.id ] = quoted_tweet_info;
+                }
+                
+                return {
+                    timeline_tweet_id : tweet_id, 
+                    updated_tweet_info_map : updated_tweet_info_map,
+                    retweeted_tweet_id_map : retweeted_tweet_id_map,
+                };
+            };
+        
+        var update_tweet_info_from_user_timeline = ( () => {
+            return ( user_id, options ) => {
+                log_debug( 'update_tweet_info_from_user_timeline() called', user_id, options );
+                
+                if ( ! options ) {
+                    options = {};
+                }
+                
+                var max_id = options.max_id,
+                    count = options.count,
+                    callback;
+                
+                if ( typeof options.callback == 'function' ) {
+                    callback = options.callback;
+                }
+                else {
+                    callback = function () {};
+                }
+                
+                fetch_user_timeline( user_id, max_id, count )
+                .then( ( json ) => {
+                    log_debug( 'update_tweet_info_from_user_timeline(): json=', json );
+                    
+                    var tweets = json;
+                    
+                    if ( ! Array.isArray( tweets ) ) {
+                        callback( {
+                            json : json,
+                            error : 'result JSON structure error',
+                        } );
+                        return;
+                    }
+                    
+                    var timeline_tweet_ids = [],
+                        updated_tweet_info_map = [],
+                        retweeted_tweet_id_map = {};
+                    
+                    tweets.forEach( ( tweet ) => {
+                        var result = update_tweet_info( tweet );
+                        
+                        timeline_tweet_ids.push( result.timeline_tweet_id );
+                        Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
+                        Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
+                    } );
+                    
+                    callback( {
+                        json : json,
+                        timeline_info : {
+                            timeline_tweet_ids : timeline_tweet_ids,
+                            updated_tweet_info_map : updated_tweet_info_map,
+                            retweeted_tweet_id_map : retweeted_tweet_id_map,
+                        }
+                    } );
+                } )
+                .catch( ( error ) => {
+                    log_error( 'update_tweet_info_from_user_timeline(): fetch error:', error );
+                    
+                    callback( {
+                        error : error,
+                    } );
+                } );
+            };
+        } )(); // end of update_tweet_info_from_user_timeline()
+        
+        
+        var update_tweet_info_from_search_timeline = ( () => {
+            return ( query, options ) => {
+                log_debug( 'update_tweet_info_from_search_timeline() called', query, options );
+                
+                if ( ! options ) {
+                    options = {};
+                }
+                
+                var count = options.count,
+                    callback;
+                
+                if ( typeof options.callback == 'function' ) {
+                    callback = options.callback;
+                }
+                else {
+                    callback = function () {};
+                }
+                
+                fetch_search_timeline( query, count )
+                .then( ( json ) => {
+                    log_debug( 'update_tweet_info_from_search_timeline(): json=', json );
+                    
+                    var modules = json.modules;
+                    
+                    if ( ! Array.isArray( modules ) ) {
+                        callback( {
+                            json : json,
+                            error : 'result JSON structure error',
+                        } );
+                        return;
+                    }
+                    
+                    var timeline_tweet_ids = [],
+                        updated_tweet_info_map = [],
+                        retweeted_tweet_id_map = {};
+                    
+                    modules.forEach( ( module ) => {
+                        var tweet;
+                        
+                        try {
+                            tweet = module.status.data;
+                            tweet.metadata = module.status.metadata;
+                        }
+                        catch ( error ) {
+                            return;
+                        }
+                        
+                        var result = update_tweet_info( tweet );
+                        
+                        timeline_tweet_ids.push( result.timeline_tweet_id );
+                        Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
+                        Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
+                    } );
+                    
+                    callback( {
+                        json : json,
+                        timeline_info : {
+                            timeline_tweet_ids : timeline_tweet_ids,
+                            updated_tweet_info_map : updated_tweet_info_map,
+                            retweeted_tweet_id_map : retweeted_tweet_id_map,
+                        }
+                    } );
+                } )
+                .catch( ( error ) => {
+                    log_error( 'update_tweet_info_from_search_timeline(): fetch error:', error );
+                    
+                    callback( {
+                        error : error,
+                    } );
+                } );
+            };
+        } )(); // end of update_tweet_info_from_search_timeline()
+        
+        
+        var update_tweet_retweeters_info = ( () => {
+            var request_cache = {};
+            
+            return ( tweet_id, options ) => {
+                log_debug( 'update_tweet_retweeters_info() called', tweet_id, options );
+                
+                if ( ! options ) {
+                    options = {};
+                }
+                
+                var max_user_count = options.max_user_count,
+                    callback;
+                
+                if ( typeof options.callback == 'function' ) {
+                    callback = options.callback;
+                }
+                else {
+                    callback = function () {};
+                }
+                
+                var last_request_ms = request_cache[ tweet_id ],
+                    current_ms = new Date().getTime(),
+                    cache_sec = options.cache_sec ? options.cache_sec : OPTIONS.STATUSES_RETWEETS_CACHE_SEC;
+                
+                if ( ( last_request_ms ) && ( ( current_ms < last_request_ms + 1000 * cache_sec ) ) ) {
+                    log_debug( 'update_tweet_retweeters_info() => cached', tweet_id  );
+                    callback( {
+                        cached : true,
+                    } );
+                    return;
+                }
+                
+                request_cache[ tweet_id ] = current_ms;
+                
+                fetch_retweets( tweet_id, max_user_count )
+                .then( ( json ) => {
+                    log_debug( 'update_tweet_retweeters_info(): json=', json );
+                    
+                    var retweets = json;
+                    
+                    if ( ! Array.isArray( retweets ) ) {
+                        callback( {
+                            json : json,
+                            error : 'result JSON structure error',
+                        } );
+                        return;
+                    }
+                    
+                    var reacted_tweet_info = get_stored_tweet_info( tweet_id ),
+                        reacted_info_map = reacted_tweet_info.rt_info_map;
+                    
+                    retweets.forEach( ( retweet ) => {
+                        var user = retweet.user,
+                            user_id = user.id_str,
+                            screen_name = user.screen_name,
+                            existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                            reacted_info = {
+                                id : retweet.id_str,
+                                user_id : user_id,
+                                screen_name : screen_name,
+                                user_name : user.name,
+                                timestamp_ms : Date.parse( retweet.created_at ),
+                            };
+                        
+                        reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                    } );
+                    
+                    log_debug( 'update_tweet_retweeters_info(): ', retweets.length, 'users registerd' );
+                    
+                    callback( {
+                        json : json,
+                        reacted_tweet_info : reacted_tweet_info,
+                    } );
+                } )
+                .catch( ( error ) => {
+                    log_error( 'update_tweet_retweeters_info(): fetch error:', error );
+                    
+                    callback( {
+                        error : error,
+                    } );
+                } );
+            };
+        } )(); // end of update_tweet_retweeters_info()
+        
+        
+        return [
+            update_tweet_info_from_user_timeline,
+            update_tweet_info_from_search_timeline,
+            update_tweet_retweeters_info,
+        ];
+    } )();
+    
+    function get_stored_tweet_info( tweet_id ) {
+        return tweet_info_map[ tweet_id ];
+    } // end of get_stored_tweet_info
+    
+    
+    function get_stored_tweet_info_map() {
+        return tweet_info_map;
+    } // end of get_stored_tweet_info_map()
+    
+    /*
+    //var get_shortcut_keys = ( () => {
+    //    var shortcut_keys = null;
+    //    
+    //    return () => {
+    //        if ( shortcut_keys ) {
+    //            return shortcut_keys;
+    //        }
+    //        
+    //        try {
+    //            shortcut_keys = JSON.parse( $( 'div[data-at-shortcutkeys]' ).attr( 'data-at-shortcutkeys' ) );
+    //        }
+    //        catch ( error ) {
+    //            shortcut_keys = null;
+    //            return {};
+    //        }
+    //        return shortcut_keys;
+    //    };
+    //} )(); // end of get_shortcut_keys()
+    //
+    //function get_event_element_from_title( title ) {
+    //    // TODO: https://twitter.com/i/timeline のページ種別（「リツイートされました」「いいねされました」等）判別が困難（多国語対応のため）
+    //    // →暫定的に、キーボードショートカットを元に、document.title に一致するものを探して判別
+    //    // → /2/notifications/all.json で取得された title が document.title のものと一致するかによってイベント種別を判別できるようになったため、get_event_element_from_title() は現状未使用
+    //    
+    //    if ( ! title ) {
+    //        title = d.title;
+    //    }
+    //    
+    //    var retweet_string = get_shortcut_keys()[ 't' ],
+    //        like_string = get_shortcut_keys()[ 'l' ];
+    //    
+    //    if ( ( ! retweet_string ) || ( ! like_string ) ) {
+    //        return 'unknown_event';
+    //    }
+    //    
+    //    if ( title.match( retweet_string ) ) {
+    //        return 'user_retweeted_tweet';
+    //    }
+    //    else if ( title.match( like_string ) ) {
+    //        return 'user_liked_tweet';
+    //    }
+    //    else {
+    //        return 'unknown_event';
+    //    }
+    //    
+    //} // end of get_event_element_from_title()
+    */
+    
+    function get_event_element_from_title( title ) {
+        if ( ! title ) {
+            title = d.title;
+        }
+        
+        var event_element = 'unknown_event';
+        
+        for ( var event_title_info of Object.values( event_title_info_map ) ) {
+            if ( title.match( event_title_info.event_title ) ) {
+                event_element = event_title_info.event_element;
+                break;
+            }
+        }
+        return event_element;
+    } // end of get_event_element_from_title()
+    
+    function get_event_title_info_map() {
+        return event_title_info_map;
+    } // end of get_event_title_info_map()
+    
+    return [
+        analyze_capture_result,
+        update_tweet_info_from_user_timeline,
+        update_tweet_info_from_search_timeline,
+        update_tweet_retweeters_info,
+        get_stored_tweet_info,
+        get_stored_tweet_info_map,
+        get_event_element_from_title,
+        get_event_title_info_map,
+    ];
+} )();
+//}
+
+
 var open_search_window = ( () => {
     var user_timeline_url_template = 'https://' + DOMAIN_PREFIX + 'twitter.com/#SCREEN_NAME#/with_replies?max_id=#MAX_ID#',
         search_query_template = 'from:#SCREEN_NAME# until:#GMT_DATETIME# include:retweets include:nativeretweets',
@@ -973,12 +1779,20 @@ var open_search_window = ( () => {
             test_tweet_id = ( target_info.id ) ? target_info.id : get_tweet_id_from_utc_sec( target_timestamp_ms / 1000.0 ),
             
             //ポップアップブロック対策
-            //child_window = open_child_window( '', '_blank' ),
-            //TODO: うまく動作しない
-            //※ Firefox では、Promise（fetch_user_timeline()）内で、InternalError: "Promise rejection value is a non-unwrappable cross-compartment wrapper." が発生
-            child_window = open_child_window( target_info.tweet_url, '_blank' ),
+            //child_window = open_child_window( 'about:blank', '_blank' ), // 空ページを開いておく
+            //→ Firefox でうまく動作しない
+            //  ※ Promise（fetch_user_timeline()）で、「InternalError: "Promise rejection value is a non-unwrappable cross-compartment wrapper."」が発生
+            child_window = open_child_window( target_info.tweet_url + ( /\?/.test( target_info.tweet_url ) ? '&' : '?' ) + '_temporary_page=' + SCRIPT_NAME, '_blank' ), // 暫定ページを開いておく
             
             open_search_page = () => {
+                var reacted_tweet_info = search_parameters.reacted_tweet_info = Object.assign( {}, search_parameters.reacted_tweet_info ),
+                    target_info = search_parameters.target_info = Object.assign( {}, search_parameters.target_info );
+                
+                delete reacted_tweet_info.rt_info_map;
+                delete reacted_tweet_info.like_info_map;
+                delete reacted_tweet_info.tweet;
+                delete target_info.notification_info;
+                
                 open_child_window( search_parameters.search_url, {
                     existing_window : child_window,
                     search_parameters : search_parameters,
@@ -995,29 +1809,36 @@ var open_search_window = ( () => {
             return;
         }
         
-        fetch_user_timeline( target_info.user_id, test_tweet_id )
-        .then( ( json ) => {
-            log_debug( 'fetch_user_timeline() json:', json );
-            
-            if ( ( ! Array.isArray( json ) ) || ( json.length <= 0 ) ) {
-                search_parameters.use_user_timeline = false;
+        update_tweet_info_from_user_timeline( target_info.user_id, {
+            max_id : test_tweet_id,
+            callback : ( result ) => {
+                if ( result.error ) {
+                    log_error( 'update_tweet_info_from_user_timeline() error:', result.error, result );
+                    
+                    search_parameters.use_user_timeline = false;
+                    open_search_page();
+                    return;
+                }
+                
+                log_debug( 'update_tweet_info_from_user_timeline() result:', result );
+                
+                if ( result.timeline_info.timeline_tweet_ids.length <= 0 ) {
+                    log_debug( 'specified tweet was not found on user timeline' );
+                    
+                    search_parameters.use_user_timeline = false;
+                    open_search_page();
+                    return;
+                }
+                
+                var until_tweet_id = get_tweet_id_from_utc_sec( until_timestamp_ms / 1000.0 ),
+                    max_id = new Decimal( until_tweet_id ).sub( 1 ).toString(),
+                    user_timeline_url = search_parameters.search_url = search_parameters.user_timeline_url = user_timeline_url_template.replace( /#SCREEN_NAME#/g, target_info.screen_name ).replace( /#MAX_ID#/g, max_id );
+                
+                log_debug( 'until_tweet_id:', until_tweet_id, 'max_id:', max_id );
+                log_debug( 'user_timeline_url', user_timeline_url );
+                
                 open_search_page();
-                return;
             }
-            
-            var until_tweet_id = get_tweet_id_from_utc_sec( until_timestamp_ms / 1000.0 ),
-                max_id = new Decimal( until_tweet_id ).sub( 1 ).toString(),
-                user_timeline_url = search_parameters.search_url = search_parameters.user_timeline_url = user_timeline_url_template.replace( /#SCREEN_NAME#/g, target_info.screen_name ).replace( /#MAX_ID#/g, max_id );
-            
-            log_debug( 'until_tweet_id:', until_tweet_id, 'max_id:', max_id );
-            log_debug( 'user_timeline_url', user_timeline_url );
-            
-            open_search_page();
-        } )
-        .catch( ( error ) => {
-            log_error( 'fetch_user_timeline() error:', error );
-            search_parameters.use_user_timeline = false;
-            open_search_page();
         } );
     };
 } )(); // end of open_search_window()
@@ -1093,7 +1914,7 @@ var create_vicinity_link_container = ( function () {
             var act_screen_name = $link.attr( 'data-act_screen_name' ) || '',
                 event_element = $link.attr( 'data-event_element' ) || '',
                 tweet_id = $link.attr( 'data-self_tweet_id' ),
-                reacted_tweet_info = get_reacted_tweet_info( tweet_id ),
+                reacted_tweet_info = get_stored_tweet_info( tweet_id ),
                 target_info = {
                     tweet_url : tweet_url,
                 };
@@ -1121,7 +1942,7 @@ var create_vicinity_link_container = ( function () {
                 // リツイート／いいね情報は元ツイートに格納されているので差し替え
                 // TODO: リツイートをいいねされた場合等は未対応
                 tweet_id = reacted_tweet_info.reacted_id;
-                reacted_tweet_info = get_reacted_tweet_info( tweet_id );
+                reacted_tweet_info = get_stored_tweet_info( tweet_id );
             }
             
             var reacted_info_map = ( is_retweeted_event_element( event_element ) ) ? reacted_tweet_info.rt_info_map : reacted_tweet_info.like_info_map,
@@ -1201,7 +2022,8 @@ var create_recent_retweet_users_button = ( () => {
 
 
 function add_vicinity_link_to_tweet( $tweet ) {
-    var tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]:has(time):first' ).attr( 'href' ),
+    //var tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]:has(time):first' ).attr( 'href' ),
+    var tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]' ).filter( function () {return ( 0 < $( this ).find( 'time' ).length );} ).first().attr( 'href' ),
         tweet_url_info = parse_individual_tweet_url( tweet_url ),
         $tweet_time,
         $tweet_caret,
@@ -1332,7 +2154,16 @@ function add_vicinity_link_to_tweet( $tweet ) {
                 'margin-right' : '32px'
             } );
             
-            $retweeter_link.parents( 'div:has(>div>svg):first' ).find( 'div:has(>svg)' ).append( $link_container );
+            //$retweeter_link.parents( 'div:has(>div>svg):first' ).find( 'div:has(>svg)' ).append( $link_container );
+            $retweeter_link.parents().each( function () {
+                var $svg = $( this ).find( 'svg' );
+                
+                if ( $svg.length <= 0 ) {
+                    return;
+                }
+                $svg.parent().append( $link_container );
+                return false;
+            } );
         }
     }
     
@@ -1404,7 +2235,12 @@ function check_help_dialog() {
 
 function check_timeline_tweets() {
     // ツイートに近傍検索ボタン挿入
-    var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]:has(div[data-testid="tweet"]):not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ),
+    //var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]:has(div[data-testid="tweet"]):not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ),
+    var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]' ).filter( function () {
+            var $tweet = $( this );
+            
+            return ( ( 0 < $tweet.find( 'div[data-testid="tweet"]' ).length ) && ( $tweet.find( '.' + VICINITY_LINK_CONTAINER_CLASS ).length <= 0 ) );
+        } ),
         tweet_url_info = parse_individual_tweet_url() || {};
     
     $tweets = $tweets.filter( function ( index ) {
@@ -1419,16 +2255,18 @@ function check_timeline_tweets() {
             return;
         }
         
-        var reacted_tweet_info = get_reacted_tweet_info( tweet_url_info.tweet_id ),
+        var reacted_tweet_info = get_stored_tweet_info( tweet_url_info.tweet_id ),
             //$users = ( reacted_tweet_info ) ? $( 'div[aria-labelledby="modal-header"] section[role="region"] div[data-testid="UserCell"]' ).filter( ':not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ) : $(),
-            $users = ( reacted_tweet_info ) ? $( 'section[role="region"] div[data-testid="UserCell"]' ).filter( ':not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ) : $(),
+            //$users = ( reacted_tweet_info ) ? $( 'section[role="region"] div[data-testid="UserCell"]' ).filter( ':not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ) : $(),
+            $users = ( reacted_tweet_info ) ? $( 'section[role="region"] div[data-testid="UserCell"]' ).filter( function () {return ( $( this ).find( '.' + VICINITY_LINK_CONTAINER_CLASS ).length <= 0 );} ) : $(),
             background_color = getComputedStyle( d.body ).backgroundColor;
         
         log_debug( 'check_timeline_tweets():', $users.length, 'retweeters found', reacted_tweet_info );
         
         $users.each( function ( index ) {
             var $user = $( this ),
-                $profile_image_link = $user.find( 'a[role="link"]:has(img[src*="profile_images/"]):first' ),
+                //$profile_image_link = $user.find( 'a[role="link"]:has(img[src*="profile_images/"]):first' ),
+                $profile_image_link = $user.find( 'a[role="link"]' ).filter( function () {return ( 0 < $( this ).find( 'img[src*="profile_images/"]' ).length );} ).first(),
                 // 設定時例  : https://pbs.twimg.com/profile_images/<user-id>/<icon-image-name>
                 // 未設定時例: https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png
                 act_screen_name = ( $profile_image_link.attr( 'href' ) || '' ).replace( /^\//, '' );
@@ -1468,7 +2306,8 @@ function check_timeline_tweets() {
                 'z-index' : 100,
             } );
             
-            $user.find( 'a[role="link"]:has(span>span):first' ).parent().after( $link_container );
+            //$user.find( 'a[role="link"]:has(span>span):first' ).parent().after( $link_container );
+            $user.find( 'a[role="link"]' ).filter( function () {return ( 0 < $( this ).find( 'span>span' ).length );} ).first().parent().after( $link_container );
         } );
     } )();
     
@@ -1541,7 +2380,7 @@ var search_vicinity_tweet = ( () => {
             if ( ( ! target_info.id ) && is_retweeted_event && is_user_timeline ) {
                 // TODO:リツイートやいいね等は、実際にアクションを起こしてから通知されるまで遅延がある
                 // →リツイート通知かつユーザータイムライン上での検索であれば、対象ツイート（reacted_tweet_info.id）を含んでいる可能性が高いため、通知時刻の一定時間前までを許容（ただし、ツイート時間以降）
-                threshold_timestamp_ms = Math.max( target_info.timestamp_ms - ACT_SEARCH_OFFSET_SEC * 1000, reacted_tweet_info.timestamp_ms );
+                threshold_timestamp_ms = Math.max( target_info.timestamp_ms - RETWEET_SEARCH_OFFSET_SEC * 1000, reacted_tweet_info.timestamp_ms );
             }
             return threshold_timestamp_ms;
         } )(),
@@ -1552,7 +2391,14 @@ var search_vicinity_tweet = ( () => {
         $primary_column = $(),
         $timeline = $(),
         $found_tweet_container = $(),
-        found_tweet_info = {},
+        
+        search_tweet_properties = {
+            is_itself : true,
+            tweet_url : ( target_info.tweet_url || '' ).replace( /^https?:\/\/[^\/]+/, '' ).replace( /(\/status(?:es)?\/\d+).*$/, '$1' ),
+            retweeter_screen_name : target_info.screen_name,
+        },
+        
+        found_tweet_properties = {},
         
         scroll_to = ( () => {
             var ua = w.navigator.userAgent.toLowerCase(),
@@ -1567,7 +2413,7 @@ var search_vicinity_tweet = ( () => {
                 if ( smooth ) {
                     $( animate_target_selector ).animate( {
                         scrollTop : top_scroll_top,
-                    }, animated_speed );
+                    }, animate_speed );
                 }
                 else {
                     $( w ).scrollTop( top_scroll_top );
@@ -1690,7 +2536,10 @@ var search_vicinity_tweet = ( () => {
                             stop_giveup_handler();
                             return;
                         }
-                        var current_last_tweet_url = $timeline.find( 'article[role="article"] a[role="link"]:has(time[datetime]):last' ).attr( 'href' );
+                        //var current_last_tweet_url = $timeline.find( 'article[role="article"] a[role="link"]:has(time[datetime]):last' ).attr( 'href' );
+                        var current_last_tweet_url = $timeline.find( 'article[role="article"] a[role="link"]' ).filter( function () {
+                                return ( 0 < $( this ).find( 'time' ).length );
+                            } ).last().attr( 'href' );
                         
                         if ( ( ! is_search_mode() ) || ( current_last_tweet_url == previous_last_tweet_url ) ) {
                             // 読み込まれたタイムラインの最後のツイートにいつまでも変化が無ければ諦める
@@ -1752,17 +2601,25 @@ var search_vicinity_tweet = ( () => {
                 var is_itself = false,
                     $found_tweet = $(),
                     
-                    $tweet_links = $timeline.find(
-                        //'div:not(.' + marked_class + ') > article[role="article"] a[role="link"]:has(time[datetime])'
-                        //※チェック済みは除いていたが、画面から外れたツイートは除去されるためあまり意味がない→常に全てチェック
-                        'article[role="article"] a[role="link"]:has(time[datetime])'
-                    ).filter( function () {
+                    /*
+                    //$tweet_links = $timeline.find(
+                    //    //'div:not(.' + marked_class + ') > article[role="article"] a[role="link"]:has(time[datetime])'
+                    //    //※チェック済みは除いていたが、画面から外れたツイートは除去されるためあまり意味がない→常に全てチェック
+                    //    'article[role="article"] a[role="link"]:has(time[datetime])'
+                    //).filter( function () {
+                    //    return parse_individual_tweet_url( $( this ).attr( 'href' ) );
+                    //} ),
+                    */
+                    $tweet_links = $timeline.find( 'article[role="article"] a[role="link"]' ).filter( function () {
+                        //return ( 0 < $( this ).find( 'time[datetime]' ).length );
+                        return ( 0 < $( this ).find( 'time' ).length );
+                    } ).filter( function () {
                         return parse_individual_tweet_url( $( this ).attr( 'href' ) );
                     } ),
                     
                     $unrecognized_tweet_links = $tweet_links.filter( function () {
                         var tweet_id = parse_individual_tweet_url( $( this ).attr( 'href' ) ).tweet_id,
-                            reacted_tweet_info = get_reacted_tweet_info( tweet_id );
+                            reacted_tweet_info = get_stored_tweet_info( tweet_id );
                         
                         if ( ! reacted_tweet_info ) {
                             log_debug( 'reacted_tweet_info is not found: tweet_id=', tweet_id );
@@ -1771,9 +2628,9 @@ var search_vicinity_tweet = ( () => {
                     } );
                 
                 if ( 0 < $unrecognized_tweet_links.length ) {
-                    log_debug( 'unrecognized', $unrecognized_tweet_links.length,  'link(s) found:', $unrecognized_tweet_links, 'reacted_tweet_info_map:', get_reacted_tweet_info_map() );
+                    log_debug( 'unrecognized', $unrecognized_tweet_links.length,  'link(s) found:', $unrecognized_tweet_links, 'reacted_tweet_info_map:', get_stored_tweet_info_map() );
                     
-                    // TODO: fetch データ取得のタイミングによっては get_reacted_tweet_info() でツイート情報が取得できない場合あり
+                    // TODO: fetch データ取得のタイミングによっては get_stored_tweet_info() でツイート情報が取得できない場合あり
                     // →遅延させて再検索
                     /*
                     //setTimeout( () => {
@@ -1808,7 +2665,7 @@ var search_vicinity_tweet = ( () => {
                     $current_tweet_container = $tweet_container;
                     current_tweet_id = tweet_url_info.tweet_id;
                     
-                    var current_reacted_tweet_info = get_reacted_tweet_info( current_tweet_id ),
+                    var current_reacted_tweet_info = get_stored_tweet_info( current_tweet_id ),
                         current_retweeter_screen_name = get_retweeter_screen_name( $tweet ),
                         current_reacted_info = ( current_retweeter_screen_name ) ? ( current_reacted_tweet_info.rt_info_map.screen_name_map[ current_retweeter_screen_name ] || current_reacted_tweet_info ) : current_reacted_tweet_info,
                         current_timestamp_ms = current_reacted_info.timestamp_ms;
@@ -1882,9 +2739,10 @@ var search_vicinity_tweet = ( () => {
                 var $found_tweet_container = $found_tweet.parent().addClass( ( is_itself ) ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
                     // ※ article[role="article"] は頻繁に書き換わることがあるため、比較的安定な parent() に class を設定
                 
-                found_tweet_info = {
+                found_tweet_properties = {
                     is_itself : is_itself,
-                    tweet_url : $found_tweet.find( 'a[role="link"]:has(time[datetime])' ).attr( 'href' ),
+                    //tweet_url : $found_tweet.find( 'a[role="link"]:has(time[datetime])' ).attr( 'href' ),
+                    tweet_url : $found_tweet.find( 'a[role="link"]' ).filter( function () {return ( 0 < $( this ).find( 'time' ).length );} ).attr( 'href' ),
                     retweeter_screen_name : get_retweeter_screen_name( $found_tweet ),
                 };
                 
@@ -1972,28 +2830,68 @@ var search_vicinity_tweet = ( () => {
             ];
         } )(),
         
-        update_found_tweet = () => {
+        update_highlight_tweets = () => {
             // タイムライン上のツイートはスクロールに応じて挿入・削除が繰り返されるため、一度見つけたツイートも任意のタイミングで削除されうる
             // →表示されている中で一致するツイートを見つけて、再度 class を設定することで対処
-            if ( 0 < $found_tweet_container.parents( 'section[role="region"]:first' ).length ) {
-                return $found_tweet_container;
-            }
             
-            var $url_matched_tweets = $timeline.find( 'article[role="article"]:has(a[role="link"][href="' + found_tweet_info.tweet_url + '"] time[datetime])' );
+            /*
+            //if ( 0 < $found_tweet_container.parents( 'section[role="region"]:first' ).length ) {
+            //    return $found_tweet_container;
+            //}
+            //
+            //var $url_matched_tweets = $timeline.find( 'article[role="article"]:has(a[role="link"][href="' + found_tweet_properties.tweet_url + '"] time[datetime])' );
+            //
+            //$url_matched_tweets.each( function () {
+            //    var $tweet = $( this );
+            //    
+            //    if ( get_retweeter_screen_name( $tweet ) != found_tweet_properties.retweeter_screen_name ) {
+            //        return;
+            //    }
+            //    
+            //    $found_tweet_container = $tweet.parent().addClass( ( found_tweet_properties.is_itself ) ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
+            //    return false;
+            //} );
+            //
+            //return $found_tweet_container;
+            */
             
-            $url_matched_tweets.each( function () {
-                var $tweet = $( this );
-                
-                if ( get_retweeter_screen_name( $tweet ) != found_tweet_info.retweeter_screen_name ) {
-                    return;
-                }
-                
-                $found_tweet_container = $tweet.parent().addClass( ( found_tweet_info.is_itself ) ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
-                return false;
-            } );
+            var $highlight_tweets = $timeline.find( 'article[role="article"] a[role="link"]' ).filter( function () {
+                    return ( 0 < $( this ).find( 'time' ).length );
+                } ).filter( function () {
+                    var $tweet_link = $( this ),
+                        $tweet,
+                        retweeter_screen_name,
+                        target_retweeter_screen_name,
+                        is_itself;
+                    
+                    switch ( $tweet_link.attr( 'href' ) ) {
+                        case search_tweet_properties.tweet_url :
+                            target_retweeter_screen_name = search_tweet_properties.retweeter_screen_name;
+                            is_itself = true;
+                            break;
+                        
+                        case found_tweet_properties.tweet_url :
+                            target_retweeter_screen_name = found_tweet_properties.retweeter_screen_name;
+                            is_itself = found_tweet_properties.is_itself;
+                            break;
+                        
+                        default :
+                            return false;
+                    }
+                    
+                    $tweet = $tweet_link.parents( 'article[role="article"]' ).first();
+                    retweeter_screen_name = get_retweeter_screen_name( $tweet );
+                    
+                    if ( retweeter_screen_name != target_retweeter_screen_name ) {
+                        return false;
+                    }
+                    $tweet.parent().addClass( is_itself ? TARGET_TWEET_CLASS : VICINITY_TWEET_CLASS );
+                    
+                    return true;
+                } );
             
-            return $found_tweet_container;
-        }; // end of update_found_tweet()
+            return $highlight_tweets;
+        }; // end of update_highlight_tweets()
     
     return () => {
         if ( ! is_search_mode() ) {
@@ -2045,11 +2943,15 @@ var search_vicinity_tweet = ( () => {
                 return;
             
             case 'found' :
-                $found_tweet_container = update_found_tweet();
+                /*
+                //$found_tweet_container = update_find_tweet();
+                //
+                //if ( $found_tweet_container.length <= 0 ) {
+                //    search_status = 'error';
+                //}
+                */
+                var $highlight_tweets = update_highlight_tweets();
                 
-                if ( $found_tweet_container.length <= 0 ) {
-                    search_status = 'error';
-                }
                 return;
         }
     };
@@ -2061,7 +2963,8 @@ function check_notification_timeline() {
         return;
     }
     
-    var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]:has(div[data-testid="tweet"])' ),
+    //var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]:has(div[data-testid="tweet"])' ),
+    var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]' ).filter( function () {return ( 0 < $( this ).find( 'div[data-testid="tweet"]' ).length );} ),
         $users = $( 'div[data-testId="primaryColumn"] div[data-testid="UserCell"]' );
     
     $users.each( function () {
@@ -2078,7 +2981,8 @@ function check_notification_timeline() {
         
         $tweets.each( function () {
             var $tweet = $( this ),
-                tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]:has(time):first' ).attr( 'href' ),
+                //tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]:has(time):first' ).attr( 'href' ),
+                tweet_url = $tweet.find( 'a[role="link"][href^="/"][href*="/status/"]' ).filter( function () {return ( 0 < $( this ).find( 'time' ).length );} ).first().attr( 'href' ),
                 tweet_url_info = parse_individual_tweet_url( tweet_url );
             
             if ( ! tweet_url_info ) {
@@ -2087,7 +2991,7 @@ function check_notification_timeline() {
             
             var tweet_id = tweet_url_info.tweet_id,
                 screen_name = tweet_url_info.screen_name,
-                reacted_tweet_info = get_reacted_tweet_info( tweet_id ),
+                reacted_tweet_info = get_stored_tweet_info( tweet_id ),
                 rt_info = reacted_tweet_info.rt_info_map.screen_name_map[ act_screen_name ],
                 like_info = reacted_tweet_info.like_info_map.screen_name_map[ act_screen_name ],
                 is_valid = ( () => {
@@ -2117,7 +3021,7 @@ function check_notification_timeline() {
                     //
                     //tweet_url = new URL( '/' + screen_name + '/status/' + tweet_id, d.baseURI ).href;
                     //
-                    //reacted_tweet_info = get_reacted_tweet_info( tweet_id );
+                    //reacted_tweet_info = get_stored_tweet_info( tweet_id );
                     //rt_info = reacted_tweet_info.rt_info_map.screen_name_map[ act_screen_name ];
                     //like_info = reacted_tweet_info.like_info_map.screen_name_map[ act_screen_name ];
                     //
@@ -2154,7 +3058,8 @@ function check_notification_timeline() {
                 } );
                 
                 //$profile_image_link.after( $link_container );
-                $user.find( 'a[role="link"]:has(span>span):first' ).parent().after( $link_container );
+                //$user.find( 'a[role="link"]:has(span>span):first' ).parent().after( $link_container );
+                $user.find( 'a[role="link"]' ).filter( function () {return ( 0 < $( this ).find( 'span>span' ).length );} ).first().parent().after( $link_container );
             }
             else {
                 $link = $link_container.find( 'a:first' );
@@ -2176,7 +3081,7 @@ function check_notification_timeline() {
                 $link.attr( 'data-event_element', like_info.event_element );
             }
             else {
-                $link.attr( 'data-event_element', 'unknown_event' );
+                $link.attr( 'data-event_element', get_event_element_from_title( d.title ) );
             }
             
             return false;
@@ -2224,398 +3129,6 @@ function check_error_page() {
 } // end of check_error_page()
 
 
-//{ ユーザーアクションイベントデータ取得関連
-//  TODO: ユーザーアクション→HTTP Requestまで時間がかかるため、リアルタイム取得は困難
-//  →現状未使用
-var [
-        analyze_client_event,
-        get_last_client_event,
-        get_client_event_log_list,
-] = ( () => {
-    var client_event_log_list = [],
-        max_client_event_log_number = 100,
-        
-        reg_client_event_url = /^\/1\.1\/jot\/client_event\.json/;
-    
-    function analyze_client_event( url, request_body ) {
-        var url_path = new URL( url ).pathname;
-        
-        if ( ! reg_client_event_url.test( url_path ) ) {
-            return;
-        }
-        
-        if ( ( ! ( request_body || '' ).match( /(?:^|&)log=(.+?)(?:&|$)/ ) ) ) {
-            return;
-        }
-        
-        var log_list = JSON.parse( decodeURIComponent( RegExp.$1 ) ),
-            click_event_log_list = log_list.filter( ( log ) => {
-                return ( ( ! isNaN( log.client_event_sequence_number ) ) && log.event_namespace && ( ( log._category_ == 'click_event' ) || ( log.event_namespace.action == 'navigate' ||  log.event_namespace.action == 'click' ) ) );
-            } );
-        
-        client_event_log_list = client_event_log_list.concat( click_event_log_list ).slice( -max_client_event_log_number );
-    } // end of analyze_client_event()
-    
-    
-    function get_last_client_event( action ) {
-        if ( ! action ) {
-            return client_event_log_list.slice( -1 )[ 0 ];
-        }
-        
-        return client_event_log_list.slice( 0 ).reverse().find( log => ( log.event_namespace && ( log.event_namespace.action == action ) ) );
-    } // end of get_last_client_event()
-    
-    
-    function get_client_event_log_list() {
-        return client_event_log_list;
-    } // end of get_client_event_log_list()
-    
-    return [
-        analyze_client_event,
-        get_last_client_event,
-        get_client_event_log_list,
-    ];
-} )();
-//}
-
-//{ Twitter API 応答取得処理関連
-var [
-    analyze_capture_result,
-    update_tweet_retweeters_info,
-    get_reacted_tweet_info,
-    get_reacted_tweet_info_map,
-] = ( () => {
-    var reg_api_2 = /^\/2\//,
-        reg_home_timeline_url = /^\/2\/timeline\/home\.json/,
-        reg_conversation_url = /^\/2\/timeline\/conversation\/(\d+)\.json/,
-        reg_user_timeline_url = /^\/2\/timeline\/(profile|media|favorites)\/(\d+)\.json/,
-        reg_search_url = /^\/2\/search\/adaptive\.json/,
-        reg_bookmark_timeline_url = /^\/2\/timeline\/bookmark.json/,
-        reg_retweeted_by_url = /^\/2\/timeline\/retweeted_by\.json/,
-        reg_notification_all_url = /^\/2\/notifications\/all\.json/,
-        reg_notification_view_url = /^\/2\/notifications\/view\/([^\/]+)\.json/,
-        
-        reg_capture_url_list = [
-            reg_api_2,
-        ],
-        
-        tweet_info_map = {},
-        notification_info_map = {};
-    
-    function analyze_capture_result( url, json ) {
-        var url_path = new URL( url ).pathname,
-            globalObjects = ( json || {} ).globalObjects;
-        
-        if ( ( ! reg_capture_url_list.some( reg_capture_url => reg_capture_url.test( url_path ) ) ) || ( ! globalObjects ) ) {
-            return;
-        }
-        
-        var timeline = json.timeline,
-            tweets = globalObjects.tweets,
-            users = globalObjects.users,
-            notifications = globalObjects.notifications,
-            
-            get_tweet_info = ( tweet_id ) => {
-                var tweet = tweets[ tweet_id ],
-                    tweet_info = tweet_info_map[ tweet_id ] = tweet_info_map[ tweet_id ] || {
-                        rt_info_map : { tweet_id_map : {}, user_id_map : {}, screen_name_map : {} },
-                        like_info_map : { user_id_map : {}, screen_name_map : {} },
-                    },
-                    user_id = tweet.user_id_str,
-                    user = users[ user_id ];
-                
-                Object.assign( tweet_info, {
-                    id : tweet_id,
-                    user_id : user_id,
-                    screen_name : user.screen_name,
-                    user_name : user.name,
-                    timestamp_ms : Date.parse( tweet.created_at ),
-                    reacted_id : tweet.retweeted_status_id_str,
-                } );
-                
-                return tweet_info;
-            },
-            
-            get_add_entries = () => {
-                try {
-                    return ( ( timeline && timeline.instructions ) || [] ).filter( ( instruction ) => instruction.addEntries )[ 0 ].addEntries.entries;
-                }
-                catch ( error ) {
-                    return [];
-                }
-            },
-            
-            update_tweet_info = () => {
-                if ( ( ! tweets ) || ( ! users ) ) {
-                    return;
-                }
-                var update = ( tweet ) => {
-                    var tweet_id = tweet.id_str,
-                        tweet_info = get_tweet_info( tweet_id ),
-                        reacted_id = tweet_info.reacted_id;
-                    
-                    if ( ! reacted_id ) {
-                        return;
-                    }
-                    
-                    var retweeted_tweet_info = get_tweet_info( reacted_id ),
-                        user_id = tweet_info.user_id,
-                        screen_name = tweet_info.screen_name,
-                        rt_info = {
-                            id : tweet_id,
-                            user_id : user_id,
-                            screen_name : screen_name,
-                            user_name : tweet_info.user_name,
-                            timestamp_ms : tweet_info.timestamp_ms,
-                        },
-                        rt_info_map = retweeted_tweet_info.rt_info_map;
-                    
-                    rt_info_map.tweet_id_map[ tweet_id ] = rt_info_map.user_id_map[ user_id ] = rt_info_map.screen_name_map[ screen_name ] = rt_info;
-                };
-                
-                for ( var [ key, tweet ] of Object.entries( tweets ) ) {
-                    update( tweet );
-                }
-            }, // end of update_tweet_info()
-            
-            update_retweeted_tweet_info = () => {
-                if ( ! reg_retweeted_by_url.test( new URL( url ).pathname ) ) {
-                    return;
-                }
-                
-                if ( ( ! users ) || ( ! timeline ) || ( ! ( timeline.id || '' ).match( /^Retweeters-(\d+)$/ ) ) ) {
-                    return;
-                }
-                
-                var tweet_id = RegExp.$1,
-                    reacted_tweet_info = get_reacted_tweet_info( tweet_id );
-                
-                if ( ! reacted_tweet_info ) {
-                    return;
-                }
-                
-                // ※ /2/timeline/retweeted_by だとリツイートIDや時間が取得できない→ /1.1/statuses/retweets で取得しなおす
-                /*
-                //var reacted_info_map = reacted_tweet_info.rt_info_map,
-                //    entries = get_add_entries();
-                //
-                //entries.forEach( ( entry ) => {
-                //    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^user-(.+)$/ ) ) ) {
-                //        return;
-                //    }
-                //    
-                //    var user_id = RegExp.$1,
-                //        timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
-                //        user = users[ user_id ],
-                //        screen_name = user.screen_name,
-                //        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
-                //        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
-                //        reacted_info = {
-                //            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
-                //            user_id : user_id,
-                //            screen_name : screen_name,
-                //            user_name : user.name,
-                //            timestamp_ms : ( existing_reacted_info && ( existing_reacted_info.timestamp_ms < timestamp_ms ) ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
-                //        };
-                //    
-                //    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
-                //} );
-                */
-                update_tweet_retweeters_info( tweet_id, {
-                    callback : ( params ) => {
-                        log_debug( 'update_tweet_retweeters_info() callback(): params=', params );
-                    },
-                    max_user_count : LIMIT_STATUSES_RETWEETS_USER_NUMBER,
-                    cache_sec : 0, // キャッシュは使用しない
-                } );
-                
-            }, // end of update_retweeted_tweet_info()
-            
-            update_notification_info = () => {
-                if ( ! reg_notification_all_url.test( new URL( url ).pathname ) ) {
-                    return;
-                }
-                
-                if ( ( ! tweets ) || ( ! users ) || ( ! notifications ) ) {
-                    return;
-                }
-                
-                var entries = get_add_entries();
-                
-                entries.forEach( ( entry ) => {
-                    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^notification-(.+)$/ ) ) ) {
-                        return;
-                    }
-                    
-                    var content = entry.content.item.content,
-                        clientEventInfo = entry.content.item.clientEventInfo;
-                    
-                    if ( ! content.notification ) {
-                        // content.tweet / clientEventInfo.element = 'user_replied_to_your_tweet' 等については未対応
-                        return;
-                    }
-                    
-                    var notification_id = content.notification.id, // ^notification-(.+)$ の数値部分と同じ
-                        notification = notifications[ notification_id ],
-                        event_element = clientEventInfo.element;
-                    
-                    if ( ( ! notification ) || ( ! is_reacted_event_element( event_element ) ) ) {
-                        return;
-                    }
-                    
-                    var notification_info = notification_info_map[ notification_id ] = notification_info_map[ notification_id ] || {},
-                        event_title = content.notification.url.urtEndpointOptions.title,
-                        timestamp_ms = 1 * notification.timestampMs, // 1 * entry.sortIndex と同じ
-                        targetObjects = notification.template.aggregateUserActionsV1.targetObjects,
-                        fromUsers = notification.template.aggregateUserActionsV1.fromUsers;
-                    
-                    Object.assign( notification_info, {
-                        id : notification_id,
-                        event_element : event_element,
-                        timestamp_ms : timestamp_ms,
-                        event_title : event_title, // https://twitter.com/i/timeline の [data-testid="primaryColumn"] h2[role="heading"] に入る
-                        content : content,
-                        clientEventInfo : clientEventInfo,
-                        notification : notification,
-                    } );
-                    
-                    targetObjects.forEach( ( targetObject ) => {
-                        var tweet_id = targetObject.tweet.id,
-                            reacted_tweet_info = get_reacted_tweet_info( tweet_id ),
-                            reacted_info_map = ( is_retweeted_event_element( event_element ) ) ? reacted_tweet_info.rt_info_map : reacted_tweet_info.like_info_map;
-                        
-                        fromUsers.forEach( ( fromUser ) => {
-                            var user_id = fromUser.user.id,
-                                user = users[ user_id ],
-                                screen_name = user.screen_name,
-                                existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
-                                // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
-                                reacted_info = {
-                                    id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
-                                    user_id : user_id,
-                                    screen_name : screen_name,
-                                    user_name : user.name,
-                                    timestamp_ms : ( existing_reacted_info && existing_reacted_info.timestamp_ms ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
-                                    event_element : event_element,
-                                    event_title : event_title,
-                                    notification_info : notification_info,
-                                };
-                            
-                            reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
-                        } );
-                    } );
-                } );
-            }; // end of update_notification_info()
-        
-        update_tweet_info();
-        update_retweeted_tweet_info();
-        update_notification_info();
-        
-    } // end of analyze_capture_result();
-    
-    
-    var update_tweet_retweeters_info = ( () => {
-        var request_cache = {};
-        
-        return ( tweet_id, options ) => {
-            log_debug( 'update_tweet_retweeters_info() called', tweet_id, options );
-            
-            if ( ! options ) {
-                options = {};
-            }
-            
-            var max_user_count = DEFAULT_STATUSES_RETWEETS_USER_NUMBER,
-                callback;
-            
-            if ( options.max_user_count && ( 0 < options.max_user_count ) && ( options.max_user_count <= LIMIT_STATUSES_RETWEETS_USER_NUMBER ) ) {
-                max_user_count = options.max_user_count;
-            }
-            
-            if ( typeof options.callback == 'function' ) {
-                callback = options.callback;
-            }
-            else {
-                callback = function () {};
-            }
-            
-            var last_request_ms = request_cache[ tweet_id ],
-                current_ms = new Date().getTime(),
-                cache_sec = options.cache_sec ? options.cache_sec : OPTIONS.STATUSES_RETWEETS_CACHE_SEC;
-            
-            if ( ( last_request_ms ) && ( ( current_ms < last_request_ms + 1000 * cache_sec ) ) ) {
-                log_debug( 'update_tweet_retweeters_info() => cached', tweet_id  );
-                callback( {
-                    cached : true,
-                } );
-                return;
-            }
-            
-            request_cache[ tweet_id ] = current_ms;
-            
-            fetch_retweets( tweet_id, max_user_count )
-            .then( ( json ) => {
-                log_debug( 'update_tweet_retweeters_info(): json=', json );
-                
-                if ( ( ! Array.isArray( json ) ) || ( json.length <= 0 ) ) {
-                    callback( {
-                        json : json,
-                    } );
-                    return;
-                }
-                
-                var reacted_tweet_info = get_reacted_tweet_info( tweet_id ),
-                    reacted_info_map = reacted_tweet_info.rt_info_map;
-                
-                json.forEach( ( retweet ) => {
-                    var user = retweet.user,
-                        user_id = user.id_str,
-                        screen_name = user.screen_name,
-                        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
-                        reacted_info = {
-                            id : retweet.id_str,
-                            user_id : user_id,
-                            screen_name : screen_name,
-                            user_name : user.name,
-                            timestamp_ms : Date.parse( retweet.created_at ),
-                        };
-                    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
-                } );
-                
-                log_debug( 'update_tweet_retweeters_info(): ', json.length, 'users registerd' );
-                
-                callback( {
-                    json : json,
-                } );
-            } )
-            .catch( ( error ) => {
-                log_error( 'update_tweet_retweeters_info(): fetch error:', error );
-                callback( {
-                    error : error,
-                } );
-            } );
-        };
-    } )(); // end of update_tweet_retweeters_info()
-    
-    
-    function get_reacted_tweet_info( tweet_id ) {
-        return tweet_info_map[ tweet_id ];
-    } // end of get_reacted_tweet_info
-    
-    
-    function get_reacted_tweet_info_map() {
-        return tweet_info_map;
-    } // end of get_reacted_tweet_info_map()
-    
-    return [
-        analyze_capture_result,
-        update_tweet_retweeters_info,
-        get_reacted_tweet_info,
-        get_reacted_tweet_info_map,
-    ];
-} )();
-//}
-
-
 function analyze_fetch_data( message ) {
     switch ( message.message_id ) {
         case 'FETCH_REQUEST_DATA' :
@@ -2641,56 +3154,61 @@ function analyze_fetch_data( message ) {
 } // end of analyze_fetch_data()
 
 
-function search_and_click_button_on_stream_item( event, button_selector ) {
-    var $region,
-        $target_element,
-        $button;
-    
-    if ( is_tweet_retweeters_url() ) {
-        $region = $( '[aria-labelledby="modal-header"] section[role="region"]' );
-        $target_element = $region.find( 'div[data-testid="UserCell"][data-focusvisible-polyfill="true"]' );
-        
-        if ( $target_element.length <= 0 ) {
-            $target_element = $region.find( 'div[data-testid="UserCell"]:has(a[data-self_tweet_id])' );
-        }
-    }
-    else {
-        $region = $( 'main[role="main"] [data-testid="primaryColumn"] section[role="region"]' );
-        $target_element = $region.find( 'article[role="article"][data-focusvisible-polyfill="true"]' );
-        
-        if ( $target_element.length <= 0 ) {
-            $target_element = $region.find( 'article[role="article"]:has(div[data-testid="tweet"])' );
-        }
-    }
-   
-    $button = $target_element.find( button_selector ).filter( ':visible' ).first();
-    
-    if ( 0 < $button.length ) {
-        $button.click();
-        
-        event.stopPropagation();
-        event.preventDefault();
-    }
-    
-    return false;
-} // end of search_and_click_button_on_stream_item()
-
-
 function start_key_observer() {
-    function is_key_acceptable() {
-        var $active_element = $( d.activeElement );
+    var is_key_acceptable = () => {
+            var $active_element = $( d.activeElement );
+            
+            if ( (
+                    ( ( $active_element.hasClass( 'tweet-box' ) ) || ( $active_element.attr( 'role' ) == 'textbox' ) || ( $active_element.attr( 'name' ) == 'tweet' ) ) &&
+                    ( $active_element.attr( 'contenteditable' ) == 'true' )
+                ) ||
+                ( $active_element.prop( 'tagName' ) == 'TEXTAREA' ) ||
+                ( ( $active_element.prop( 'tagName' ) == 'INPUT' ) && ( $active_element.attr( 'type' ).toUpperCase() == 'TEXT' ) )
+            ) {
+                return false;
+            }
+            return true;
+        }, // end of is_key_acceptable()
         
-        if ( (
-                ( ( $active_element.hasClass( 'tweet-box' ) ) || ( $active_element.attr( 'role' ) == 'textbox' ) || ( $active_element.attr( 'name' ) == 'tweet' ) ) &&
-                ( $active_element.attr( 'contenteditable' ) == 'true' )
-            ) ||
-            ( $active_element.prop( 'tagName' ) == 'TEXTAREA' ) ||
-            ( ( $active_element.prop( 'tagName' ) == 'INPUT' ) && ( $active_element.attr( 'type' ).toUpperCase() == 'TEXT' ) )
-        ) {
+        search_and_click_button_on_stream_item = ( event, button_selector ) => {
+            var $region,
+                $target_element,
+                $button;
+            
+            if ( is_tweet_retweeters_url() ) {
+                $region = $( '[aria-labelledby="modal-header"] section[role="region"]' );
+                $target_element = $region.find( 'div[data-testid="UserCell"][data-focusvisible-polyfill="true"]' );
+                
+                if ( $target_element.length <= 0 ) {
+                    //$target_element = $region.find( 'div[data-testid="UserCell"]:has(a[data-self_tweet_id])' );
+                    $target_element = $region.find( 'div[data-testid="UserCell"]' ).filter( function () {
+                        return ( 0 < $( this ).find( 'a[data-self_tweet_id]' ) );
+                    } );
+                }
+            }
+            else {
+                $region = $( 'main[role="main"] [data-testid="primaryColumn"] section[role="region"]' );
+                $target_element = $region.find( 'article[role="article"][data-focusvisible-polyfill="true"]' );
+                
+                if ( $target_element.length <= 0 ) {
+                    //$target_element = $region.find( 'article[role="article"]:has(div[data-testid="tweet"])' );
+                    $target_element = $region.find( 'article[role="article"]' ).filter( function () {
+                        return ( 0 < $( this ).find( 'div[data-testid="tweet"]' ).length );
+                    } );
+                }
+            }
+           
+            $button = $target_element.find( button_selector ).filter( ':visible' ).first();
+            
+            if ( 0 < $button.length ) {
+                $button.click();
+                
+                event.stopPropagation();
+                event.preventDefault();
+            }
+            
             return false;
-        }
-        return true;
-    } // end of is_key_acceptable()
+        }; // end of search_and_click_button_on_stream_item()
     
     $( d.body )
     .on( 'keydown.main', function ( event ) {
