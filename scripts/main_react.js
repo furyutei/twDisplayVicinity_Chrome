@@ -2395,7 +2395,7 @@ var search_vicinity_tweet = ( () => {
         search_tweet_properties = {
             is_itself : true,
             tweet_url : ( target_info.tweet_url || '' ).replace( /^https?:\/\/[^\/]+/, '' ).replace( /(\/status(?:es)?\/\d+).*$/, '$1' ),
-            retweeter_screen_name : target_info.screen_name,
+            retweeter_screen_name : ( is_retweeted_event ) ? SEARCH_PARAMETERS.act_screen_name : '',
         },
         
         found_tweet_properties = {},
@@ -2431,7 +2431,8 @@ var search_vicinity_tweet = ( () => {
                     $( '#' + search_style_id ).remove();
                     
                     insert_css( [
-                        'div[data-testid="sidebarColumn"] {display: none;}',
+                        //'div[data-testid="sidebarColumn"] {display: none;}',
+                        'div[data-testid="sidebarColumn"] {visibility: hidden;}',
                     ].join( '\n' ), search_style_id );
                 }, // end of hide_sidebar()
                 
@@ -2439,7 +2440,8 @@ var search_vicinity_tweet = ( () => {
                     $( '#' + search_style_id ).remove();
                     /*
                     //insert_css( [
-                    //    'div[data-testid="sidebarColumn"] {display: flex;}',
+                    //    //'div[data-testid="sidebarColumn"] {display: flex;}',
+                    //    'div[data-testid="sidebarColumn"] {visibility: visible;}',
                     //].join( '\n' ), search_style_id );
                     */
                 }; // end of show_sidebar()
@@ -2855,6 +2857,8 @@ var search_vicinity_tweet = ( () => {
             //return $found_tweet_container;
             */
             
+            $timeline = $( 'div[data-testid="primaryColumn"] section[role="region"]' ); // ページ遷移を行うと $timeline も書き換わる
+            
             var $highlight_tweets = $timeline.find( 'article[role="article"] a[role="link"]' ).filter( function () {
                     return ( 0 < $( this ).find( 'time' ).length );
                 } ).filter( function () {
@@ -2865,14 +2869,14 @@ var search_vicinity_tweet = ( () => {
                         is_itself;
                     
                     switch ( $tweet_link.attr( 'href' ) ) {
-                        case search_tweet_properties.tweet_url :
-                            target_retweeter_screen_name = search_tweet_properties.retweeter_screen_name;
-                            is_itself = true;
-                            break;
-                        
                         case found_tweet_properties.tweet_url :
                             target_retweeter_screen_name = found_tweet_properties.retweeter_screen_name;
                             is_itself = found_tweet_properties.is_itself;
+                            break;
+                        
+                        case search_tweet_properties.tweet_url :
+                            target_retweeter_screen_name = search_tweet_properties.retweeter_screen_name;
+                            is_itself = true;
                             break;
                         
                         default :

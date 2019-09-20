@@ -1,6 +1,11 @@
-twDisplayVicinity
+twDisplayVicinity  
 =================
 【近傍ツイート検索】特定ツイート前後のタイムラインを表示するユーザースクリプト  
+
+2019年7月のTwitterデザイン(UI)変更に伴い、ユーザースクリプト版は動作しなくなっております。  
+---
+**[Chrome拡張機能版](https://chrome.google.com/webstore/detail/twdisplayvicinity/anmfeeanmnmdkjlhojpodibignbcfgjm) もしくは [Firefoxアドオン版](https://addons.mozilla.org/ja/firefox/addon/twdisplayvicinity/) をご利用願います（[ソースコードは→こちら](https://github.com/furyutei/twDisplayVicinity_Chrome)）。**  
+
 - License: The MIT license  
 - Copyright (c) 2014 風柳(furyu)  
 - 対象ブラウザ： Firefox（<s>[Greasemonkey](https://addons.mozilla.org/ja/firefox/addon/greasemonkey/)</s>[Tampermonkey](https://addons.mozilla.org/ja/firefox/addon/tampermonkey/)が必要）、Google Chrome（[Tampermonkey](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo?hl=ja)が必要）  
@@ -40,7 +45,7 @@ twDisplayVicinity
 [【近傍ツイート検索】特定ツイート前後のタイムラインを表示するユーザースクリプト試作](http://furyu.hatenablog.com/entry/20140327/1395914958)
 
 
-■ Google Chrome 専用版（拡張機能）について
+■ Google Chrome 専用版（拡張機能）／Firefox Quantum アドオンについて
 ---
 Google Chrome用には、[専用版（拡張機能）](https://chrome.google.com/webstore/detail/twdisplayvicinity/anmfeeanmnmdkjlhojpodibignbcfgjm)があります。  
 また、Firefox Quantum用には、[専用アドオン（WebExtensions）](https://addons.mozilla.org/ja/firefox/addon/twdisplayvicinity/)があります。  
