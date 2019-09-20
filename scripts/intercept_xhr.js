@@ -20,6 +20,10 @@ window.XMLHttpRequest.prototype.open = function ( method, url, async, user, pass
     
     if ( typeof url_filter == 'function' ) {
         arguments[ 1 ] = replaced_url = url_filter( url || '' );
+        
+        if ( typeof response_filter != 'function' ) {
+            response_filter = ( original_responseText, replaced_url, called_url, original_responseURL ) => original_responseText;
+        }
     }
     xhr._called_url = called_url;
     xhr._replaced_url = replaced_url;
@@ -30,12 +34,16 @@ window.XMLHttpRequest.prototype.open = function ( method, url, async, user, pass
                 if ( xhr.readyState != 4 ) {
                     return;
                 }
-                var original_responseText = event.target.responseText,
+                var original_responseURL = event.target.responseURL,
+                    original_responseText = event.target.responseText,
                     // ※ Object.defineProperty() コール前に保存（defineProperty() コール時点で元の responseText にはアクセス不可となることに注意）
-                    filterd_responseText = response_filter( original_responseText, replaced_url, called_url );
+                    filterd_responseText = response_filter( original_responseText, replaced_url, called_url, original_responseURL );
+                
+                Object.defineProperty( xhr, 'responseURL', {writable: true} );
+                xhr.responseURL = called_url;
+                xhr._original_responseURL = original_responseURL;
                 
                 Object.defineProperty( xhr, 'responseText', {writable: true} );
-                
                 xhr.responseText = filterd_responseText;
                 xhr._original_responseText = original_responseText;
             } );

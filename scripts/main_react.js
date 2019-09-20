@@ -115,9 +115,9 @@ if ( IS_TOUCHED ) {
     return;
 }
 
-if ( new RegExp( '[?&]_temporary_page=' + SCRIPT_NAME + '(?:&|$)' ).test( location.href ) ) {
+if ( /[?&]_temporary_page=true(?:&|$)/.test( location.href ) ) {
     // ポップアップブロック対策用暫定ページの場合は表示を隠す
-    $( d.body ).hide();
+    $( d.documentElement ).hide();
     return;
 }
 
@@ -293,7 +293,19 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
         return search_parameters;
     } )(),
     
-    DOMAIN_PREFIX = location.hostname.match( /^(.+\.)?twitter\.com$/ )[ 1 ] || '';
+    DOMAIN_PREFIX = location.hostname.match( /^(.+\.)?twitter\.com$/ )[ 1 ] || '',
+    
+    TEMPORARY_PAGE_URL = ( () => {
+        // ポップアップブロック対策に一時的に読み込むページのURLを取得
+        // ※なるべく軽いページが望ましい
+        // ※非同期で設定しているが、ユーザーがアクションを起こすまでには読み込まれているだろうことを期待
+        var test_url = new URL( '/favicon.ico?_temporary_page=true', d.baseURI ).href;
+        
+        fetch( test_url ).then( ( response ) => {
+            TEMPORARY_PAGE_URL = test_url;
+        } );
+        return null;
+    } )();
 
 //}
 
@@ -1131,33 +1143,35 @@ var [
                     return;
                 }
                 
-                // ※ /2/timeline/retweeted_by だとリツイートIDや時間が取得できない→ /1.1/statuses/retweets で取得しなおす
-                /*
-                //var reacted_info_map = reacted_tweet_info.rt_info_map,
-                //    entries = get_add_entries();
-                //
-                //entries.forEach( ( entry ) => {
-                //    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^user-(.+)$/ ) ) ) {
-                //        return;
-                //    }
-                //    
-                //    var user_id = RegExp.$1,
-                //        timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
-                //        user = users[ user_id ],
-                //        screen_name = user.screen_name,
-                //        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
-                //        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
-                //        reacted_info = {
-                //            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
-                //            user_id : user_id,
-                //            screen_name : screen_name,
-                //            user_name : user.name,
-                //            timestamp_ms : ( existing_reacted_info && ( existing_reacted_info.timestamp_ms < timestamp_ms ) ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
-                //        };
-                //    
-                //    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
-                //} );
-                */
+                // TODO: /2/timeline/retweeted_by の場合、リツイートIDや時刻が取得できない
+                // → /1.1/statuses/retweets で取得しなおす
+                // ※頻繁にRTされていると、二つの API 結果にずれが生じる（頻繁にRTされている最中ならば retweeted_by の方の entry.sortIndex を使用しても時刻のずれはそれ程問題にならないかも）
+                var reacted_info_map = reacted_tweet_info.rt_info_map,
+                    entries = get_add_entries();
+                
+                entries.forEach( ( entry ) => {
+                    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^user-(.+)$/ ) ) ) {
+                        return;
+                    }
+                    
+                    var user_id = RegExp.$1,
+                        timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
+                        user = users[ user_id ],
+                        screen_name = user.screen_name,
+                        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
+                        reacted_info = {
+                            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
+                            user_id : user_id,
+                            screen_name : screen_name,
+                            user_name : user.name,
+                            timestamp_ms : ( existing_reacted_info && ( existing_reacted_info.timestamp_ms < timestamp_ms ) ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
+                        };
+                    
+                    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                } );
+                
+                // /1.1/statuses/retweets で取得しなおして上書き
                 update_tweet_retweeters_info( tweet_id, {
                     callback : ( params ) => {
                         log_debug( 'update_tweet_retweeters_info() callback(): params=', params );
@@ -1782,7 +1796,7 @@ var open_search_window = ( () => {
             //child_window = open_child_window( 'about:blank', '_blank' ), // 空ページを開いておく
             //→ Firefox でうまく動作しない
             //  ※ Promise（fetch_user_timeline()）で、「InternalError: "Promise rejection value is a non-unwrappable cross-compartment wrapper."」が発生
-            child_window = open_child_window( target_info.tweet_url + ( /\?/.test( target_info.tweet_url ) ? '&' : '?' ) + '_temporary_page=' + SCRIPT_NAME, '_blank' ), // 暫定ページを開いておく
+            child_window = open_child_window( ( TEMPORARY_PAGE_URL || target_info.tweet_url ) + ( /\?/.test( target_info.tweet_url ) ? '&' : '?' ) + '_temporary_page=true', '_blank' ), // 暫定ページを開いておく
             
             open_search_page = () => {
                 var reacted_tweet_info = search_parameters.reacted_tweet_info = Object.assign( {}, search_parameters.reacted_tweet_info ),
