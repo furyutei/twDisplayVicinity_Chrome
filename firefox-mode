@@ -1,2 +1,2 @@
 #! /bin/sh
-cp -a ./manifest-firefox.json ./manifest.json
+cp -a ./src/manifest-firefox.json ./src/manifest.json
