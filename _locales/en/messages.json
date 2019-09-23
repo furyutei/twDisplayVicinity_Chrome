@@ -95,4 +95,7 @@
 , "STOP" : {
     "message" : "Stop"
   }
+, "ENABLED_ON_TWEETDECK_HEADER" : {
+    "message" : "On TweetDeck"
+  }
 }

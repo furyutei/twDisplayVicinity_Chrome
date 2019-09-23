@@ -2831,11 +2831,13 @@ var search_vicinity_tweet = ( () => {
                             return false;
                         }
                         
-                        if ( bignum_cmp( current_target_id, reacted_tweet_info.id ) < 0 ) {
-                            is_itself = false;
-                            $found_tweet = $tweet;
-                            
-                            return false;
+                        if ( reacted_tweet_info.id ) {
+                            if ( bignum_cmp( current_target_id, reacted_tweet_info.id ) < 0 ) {
+                                is_itself = false;
+                                $found_tweet = $tweet;
+                                
+                                return false;
+                            }
                         }
                     }
                 } );

@@ -48,5 +48,4 @@
 ,   "web_accessible_resources" : [
         "scripts/*.js"
     ]
-,   "incognito" : "split"
 }

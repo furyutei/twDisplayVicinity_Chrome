@@ -51,7 +51,8 @@ h2 {
 }
 
 div.opt {
-    margin: 4px 16px 12px 16px;
+    /*margin: 4px 16px 12px 16px;*/
+    margin: 4px 16px 6px 16px;
 }
 
 div.opt.int,
@@ -60,7 +61,8 @@ div.opt.str {
 }
 
 p {
-    margin: 8px 16px;
+    /*margin: 8px 16px;*/
+    margin: 4px 16px;
 }
 
 img {

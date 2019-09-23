@@ -41,6 +41,7 @@ $( function () {
             { key : 'USE_SEARCH_TL_BY_DEFAULT', val : false }
         ,   { key : 'USE_LINK_ICON', val : true }
         ,   { key : 'ENABLE_RECENT_RETWEET_USERS_BUTTON', val : true }
+        ,   { key : 'ENABLED_ON_TWEETDECK', val : true }
         ],
         INT_KV_LIST = [
             //{ key : 'HOUR_AFTER', val : 8, min : 0, max : null }
