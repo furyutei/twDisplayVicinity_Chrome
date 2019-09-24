@@ -1216,15 +1216,15 @@ function set_user_css() {
             vicinity_link_container_selector + ' {display: inline-block;}',
             
             vicinity_link_container_selector + '.icon a {' + [
-                'color : ' + OPTIONS.LINK_ICON_COLOR,
+                'color : ' + OPTIONS.LINK_ICON_COLOR + '!important',
             ].join( '; ' ) + ';}',
             
             vicinity_link_container_selector + '.icon a:hover {' + [
-                'color : ' + OPTIONS.LINK_ICON_COLOR_HOVER,
+                'color : ' + OPTIONS.LINK_ICON_COLOR_HOVER + '!important',
             ].join( '; ' ) + ';}',
             
-            night_mode_selector + ' ' + vicinity_link_container_selector + '.icon a {color: ' + OPTIONS.LINK_ICON_COLOR_NIGHTMODE + ';}',
-            night_mode_selector + ' ' + vicinity_link_container_selector + '.icon a:hover {color: ' + OPTIONS.LINK_ICON_COLOR_HOVER_NIGHTMODE + ';}',
+            night_mode_selector + ' ' + vicinity_link_container_selector + '.icon a {color: ' + OPTIONS.LINK_ICON_COLOR_NIGHTMODE + '!important;}',
+            night_mode_selector + ' ' + vicinity_link_container_selector + '.icon a:hover {color: ' + OPTIONS.LINK_ICON_COLOR_HOVER_NIGHTMODE + '!important;}',
             
             vicinity_link_container_selector + '.icon a svg {width: 100%; height: auto;}',
             

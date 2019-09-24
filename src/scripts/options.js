@@ -216,7 +216,7 @@ $( function () {
         
         function set_operation( next_operation ) {
             var button_text = ( next_operation ) ? ( chrome.i18n.getMessage( 'STOP' ) ) : ( chrome.i18n.getMessage( 'START' ) ),
-                path_to_img = ( IS_EDGE ) ? 'images' : 'images', // TODO: MS-Edge の場合、options.html からの相対パスになっていない（manifest.jsonからの相対パス？）
+                path_to_img = ( IS_EDGE ) ? 'images' : '../images', // TODO: MS-Edge の場合、options.html からの相対パスになっていない（manifest.jsonからの相対パス？）
                 icon_path = ( next_operation ) ? ( path_to_img + '/icon_16.png' ) : ( path_to_img + '/icon_16-gray.png' );
             
             jq_operation.val( button_text );

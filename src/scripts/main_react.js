@@ -2549,11 +2549,21 @@ var search_vicinity_tweet = ( () => {
         } )(),
         
         [ 
+            hide_primary_column,
+            show_primary_column,
             hide_sidebar,
             show_sidebar,
         ] = ( () => {
             var search_style_id = SCRIPT_NAME + '-search_style',
-            
+                
+                hide_primary_column = () => {
+                    $primary_column.css( 'visibility', 'hidden' );
+                }, // end of hide_primary_column()
+                
+                show_primary_column = () => {
+                    $primary_column.css( 'visibility', 'visible' );
+                }, // end of show_primary_column()
+                
                 hide_sidebar = () => {
                     $( '#' + search_style_id ).remove();
                     
@@ -2571,9 +2581,12 @@ var search_vicinity_tweet = ( () => {
                     //    'div[data-testid="sidebarColumn"] {visibility: visible;}',
                     //].join( '\n' ), search_style_id );
                     */
+                    show_primary_column();
                 }; // end of show_sidebar()
             
             return [
+                hide_primary_column,
+                show_primary_column,
                 hide_sidebar,
                 show_sidebar,
             ];
@@ -2986,7 +2999,7 @@ var search_vicinity_tweet = ( () => {
             //return $found_tweet_container;
             */
             
-            $timeline = $( 'div[data-testid="primaryColumn"] section[role="region"]' ); // ページ遷移を行うと $timeline も書き換わる
+            //$timeline = $( 'div[data-testid="primaryColumn"] section[role="region"]' ); // ページ遷移を行うと $timeline も書き換わる
             
             var $highlight_tweets = $timeline.find( 'article[role="article"] a[role="link"]' ).filter( function () {
                     return ( 0 < $( this ).find( 'time' ).length );
@@ -3031,6 +3044,9 @@ var search_vicinity_tweet = ( () => {
             return;
         }
         
+        $primary_column = $( 'div[data-testid="primaryColumn"]' );
+        $timeline = $primary_column.find( 'section[role="region"]' ); // ページ遷移を行うと $timeline も書き換わる
+        
         switch ( search_status ) {
             case 'error' :
                 return;
@@ -3038,30 +3054,37 @@ var search_vicinity_tweet = ( () => {
             case 'initialize' :
                 hide_sidebar();
                 
-                $primary_column = $( 'div[data-testid="primaryColumn"]' );
+                //$primary_column = $( 'div[data-testid="primaryColumn"]' );
                 if ( $primary_column.length <= 0 ) {
                     return;
                 }
                 
+                if ( $timeline.length <= 0 ) {
+                }
                 start_giveup_handler();
                 
-                $timeline = $primary_column.find( 'section[role="region"]' );
+                //$timeline = $primary_column.find( 'section[role="region"]' );
                 
                 if ( 0 < $timeline.length ) {
                     start_cancel_handler();
                     search_status = 'search';
                 }
                 else {
+                    hide_primary_column();
                     search_status = 'wait_ready';
                 }
                 return;
             
             case 'wait_ready' :
-                $timeline = $primary_column.find( 'section[role="region"]' );
+                //$timeline = $primary_column.find( 'section[role="region"]' );
                 
                 if ( 0 < $timeline.length ) {
+                    show_primary_column();
                     start_cancel_handler();
                     search_status = 'search';
+                }
+                else {
+                    hide_primary_column();
                 }
                 return;
             
