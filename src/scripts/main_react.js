@@ -1182,11 +1182,14 @@ var [
                 
                 // /1.1/statuses/retweets で取得しなおして上書き
                 update_tweet_retweeters_info( tweet_id, {
-                    callback : ( params ) => {
-                        log_debug( 'update_tweet_retweeters_info() callback(): params=', params );
-                    },
                     max_user_count : LIMIT_STATUSES_RETWEETS_USER_NUMBER,
                     cache_sec : 0, // キャッシュは使用しない
+                } )
+                .then( ( result ) => {
+                    log_debug( 'update_tweet_retweeters_info(): result=', result );
+                } )
+                .catch( ( result ) => {
+                    log_error( 'update_tweet_retweeters_info(): error=', result.error, result );
                 } );
                 
             }, // end of analyze_retweeted_tweet_info()
@@ -1474,56 +1477,50 @@ var [
                 }
                 
                 var max_id = options.max_id,
-                    count = options.count,
-                    callback;
+                    count = options.count;
                 
-                if ( typeof options.callback == 'function' ) {
-                    callback = options.callback;
-                }
-                else {
-                    callback = function () {};
-                }
-                
-                fetch_user_timeline( user_id, max_id, count )
-                .then( ( json ) => {
-                    log_debug( 'update_tweet_info_from_user_timeline(): json=', json );
-                    
-                    var tweets = json;
-                    
-                    if ( ! Array.isArray( tweets ) ) {
-                        callback( {
-                            json : json,
-                            error : 'result JSON structure error',
-                        } );
-                        return;
-                    }
-                    
-                    var timeline_tweet_ids = [],
-                        updated_tweet_info_map = [],
-                        retweeted_tweet_id_map = {};
-                    
-                    tweets.forEach( ( tweet ) => {
-                        var result = update_tweet_info( tweet );
+                return new Promise( ( resolve, reject ) => {
+                    fetch_user_timeline( user_id, max_id, count )
+                    .then( ( json ) => {
+                        log_debug( 'update_tweet_info_from_user_timeline(): json=', json );
                         
-                        timeline_tweet_ids.push( result.timeline_tweet_id );
-                        Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
-                        Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
-                    } );
-                    
-                    callback( {
-                        json : json,
-                        timeline_info : {
-                            timeline_tweet_ids : timeline_tweet_ids,
-                            updated_tweet_info_map : updated_tweet_info_map,
-                            retweeted_tweet_id_map : retweeted_tweet_id_map,
+                        var tweets = json;
+                        
+                        if ( ! Array.isArray( tweets ) ) {
+                            reject( {
+                                json : json,
+                                error : 'result JSON structure error',
+                            } );
+                            return;
                         }
-                    } );
-                } )
-                .catch( ( error ) => {
-                    log_error( 'update_tweet_info_from_user_timeline(): fetch error:', error );
-                    
-                    callback( {
-                        error : error,
+                        
+                        var timeline_tweet_ids = [],
+                            updated_tweet_info_map = [],
+                            retweeted_tweet_id_map = {};
+                        
+                        tweets.forEach( ( tweet ) => {
+                            var result = update_tweet_info( tweet );
+                            
+                            timeline_tweet_ids.push( result.timeline_tweet_id );
+                            Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
+                            Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
+                        } );
+                        
+                        resolve( {
+                            json : json,
+                            timeline_info : {
+                                timeline_tweet_ids : timeline_tweet_ids,
+                                updated_tweet_info_map : updated_tweet_info_map,
+                                retweeted_tweet_id_map : retweeted_tweet_id_map,
+                            }
+                        } );
+                    } )
+                    .catch( ( error ) => {
+                        log_debug( 'update_tweet_info_from_user_timeline(): fetch error:', error );
+                        
+                        reject( {
+                            error : error,
+                        } );
                     } );
                 } );
             };
@@ -1538,66 +1535,60 @@ var [
                     options = {};
                 }
                 
-                var count = options.count,
-                    callback;
+                var count = options.count;
                 
-                if ( typeof options.callback == 'function' ) {
-                    callback = options.callback;
-                }
-                else {
-                    callback = function () {};
-                }
-                
-                fetch_search_timeline( query, count )
-                .then( ( json ) => {
-                    log_debug( 'update_tweet_info_from_search_timeline(): json=', json );
-                    
-                    var modules = json.modules;
-                    
-                    if ( ! Array.isArray( modules ) ) {
-                        callback( {
-                            json : json,
-                            error : 'result JSON structure error',
-                        } );
-                        return;
-                    }
-                    
-                    var timeline_tweet_ids = [],
-                        updated_tweet_info_map = [],
-                        retweeted_tweet_id_map = {};
-                    
-                    modules.forEach( ( module ) => {
-                        var tweet;
+                return new Promise( ( resolve, reject ) => {
+                    fetch_search_timeline( query, count )
+                    .then( ( json ) => {
+                        log_debug( 'update_tweet_info_from_search_timeline(): json=', json );
                         
-                        try {
-                            tweet = module.status.data;
-                            tweet.metadata = module.status.metadata;
-                        }
-                        catch ( error ) {
+                        var modules = json.modules;
+                        
+                        if ( ! Array.isArray( modules ) ) {
+                            reject( {
+                                json : json,
+                                error : 'result JSON structure error',
+                            } );
                             return;
                         }
                         
-                        var result = update_tweet_info( tweet );
+                        var timeline_tweet_ids = [],
+                            updated_tweet_info_map = [],
+                            retweeted_tweet_id_map = {};
                         
-                        timeline_tweet_ids.push( result.timeline_tweet_id );
-                        Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
-                        Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
-                    } );
-                    
-                    callback( {
-                        json : json,
-                        timeline_info : {
-                            timeline_tweet_ids : timeline_tweet_ids,
-                            updated_tweet_info_map : updated_tweet_info_map,
-                            retweeted_tweet_id_map : retweeted_tweet_id_map,
-                        }
-                    } );
-                } )
-                .catch( ( error ) => {
-                    log_error( 'update_tweet_info_from_search_timeline(): fetch error:', error );
-                    
-                    callback( {
-                        error : error,
+                        modules.forEach( ( module ) => {
+                            var tweet;
+                            
+                            try {
+                                tweet = module.status.data;
+                                tweet.metadata = module.status.metadata;
+                            }
+                            catch ( error ) {
+                                return;
+                            }
+                            
+                            var result = update_tweet_info( tweet );
+                            
+                            timeline_tweet_ids.push( result.timeline_tweet_id );
+                            Object.assign( updated_tweet_info_map, result.updated_tweet_info_map );
+                            Object.assign( retweeted_tweet_id_map, result.retweeted_tweet_id_map );
+                        } );
+                        
+                        resolve( {
+                            json : json,
+                            timeline_info : {
+                                timeline_tweet_ids : timeline_tweet_ids,
+                                updated_tweet_info_map : updated_tweet_info_map,
+                                retweeted_tweet_id_map : retweeted_tweet_id_map,
+                            }
+                        } );
+                    } )
+                    .catch( ( error ) => {
+                        log_debug( 'update_tweet_info_from_search_timeline(): fetch error:', error );
+                        
+                        reject( {
+                            error : error,
+                        } );
                     } );
                 } );
             };
@@ -1615,74 +1606,68 @@ var [
                 }
                 
                 var max_user_count = options.max_user_count,
-                    callback;
-                
-                if ( typeof options.callback == 'function' ) {
-                    callback = options.callback;
-                }
-                else {
-                    callback = function () {};
-                }
-                
-                var last_request_ms = request_cache[ tweet_id ],
+                    last_request_ms = request_cache[ tweet_id ],
                     current_ms = new Date().getTime(),
                     cache_sec = options.cache_sec ? options.cache_sec : OPTIONS.STATUSES_RETWEETS_CACHE_SEC;
                 
-                if ( ( last_request_ms ) && ( ( current_ms < last_request_ms + 1000 * cache_sec ) ) ) {
-                    log_debug( 'update_tweet_retweeters_info() => cached', tweet_id  );
-                    callback( {
-                        cached : true,
-                    } );
-                    return;
-                }
-                
-                request_cache[ tweet_id ] = current_ms;
-                
-                fetch_retweets( tweet_id, max_user_count )
-                .then( ( json ) => {
-                    log_debug( 'update_tweet_retweeters_info(): json=', json );
-                    
-                    var retweets = json;
-                    
-                    if ( ! Array.isArray( retweets ) ) {
-                        callback( {
-                            json : json,
-                            error : 'result JSON structure error',
+                return new Promise( ( resolve, reject ) => {
+                    if ( ( last_request_ms ) && ( ( current_ms < last_request_ms + 1000 * cache_sec ) ) ) {
+                        log_debug( 'update_tweet_retweeters_info() => cached', tweet_id  );
+                        
+                        resolve( {
+                            cached : true,
                         } );
                         return;
                     }
                     
-                    var reacted_tweet_info = get_stored_tweet_info( tweet_id ),
-                        reacted_info_map = reacted_tweet_info.rt_info_map;
+                    request_cache[ tweet_id ] = current_ms;
                     
-                    retweets.forEach( ( retweet ) => {
-                        var user = retweet.user,
-                            user_id = user.id_str,
-                            screen_name = user.screen_name,
-                            existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
-                            reacted_info = {
-                                id : retweet.id_str,
-                                user_id : user_id,
-                                screen_name : screen_name,
-                                user_name : user.name,
-                                timestamp_ms : Date.parse( retweet.created_at ),
-                            };
+                    fetch_retweets( tweet_id, max_user_count )
+                    .then( ( json ) => {
+                        log_debug( 'update_tweet_retweeters_info(): json=', json );
                         
-                        reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
-                    } );
-                    
-                    log_debug( 'update_tweet_retweeters_info(): ', retweets.length, 'users registerd' );
-                    
-                    callback( {
-                        json : json,
-                        reacted_tweet_info : reacted_tweet_info,
-                    } );
-                } )
-                .catch( ( error ) => {
-                    log_error( 'update_tweet_retweeters_info(): fetch error:', error );
-                    
-                    callback( {
-                        error : error,
+                        var retweets = json;
+                        
+                        if ( ! Array.isArray( retweets ) ) {
+                            reject( {
+                                json : json,
+                                error : 'result JSON structure error',
+                            } );
+                            return;
+                        }
+                        
+                        var reacted_tweet_info = get_stored_tweet_info( tweet_id ),
+                            reacted_info_map = reacted_tweet_info.rt_info_map;
+                        
+                        retweets.forEach( ( retweet ) => {
+                            var user = retweet.user,
+                                user_id = user.id_str,
+                                screen_name = user.screen_name,
+                                existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                                reacted_info = {
+                                    id : retweet.id_str,
+                                    user_id : user_id,
+                                    screen_name : screen_name,
+                                    user_name : user.name,
+                                    timestamp_ms : Date.parse( retweet.created_at ),
+                                };
+                            
+                            reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                        } );
+                        
+                        log_debug( 'update_tweet_retweeters_info(): ', retweets.length, 'users registerd' );
+                        
+                        resolve( {
+                            json : json,
+                            reacted_tweet_info : reacted_tweet_info,
+                        } );
+                    } )
+                    .catch( ( error ) => {
+                        log_debug( 'update_tweet_retweeters_info(): fetch error:', error );
+                        
+                        reject( {
+                            error : error,
+                        } );
                     } );
                 } );
             };
@@ -1849,34 +1834,32 @@ var open_search_window = ( () => {
         
         update_tweet_info_from_user_timeline( target_info.user_id, {
             max_id : test_tweet_id,
-            callback : ( result ) => {
-                if ( result.error ) {
-                    log_error( 'update_tweet_info_from_user_timeline() error:', result.error, result );
-                    
-                    search_parameters.use_user_timeline = false;
-                    open_search_page();
-                    return;
-                }
+        } )
+        .then( ( result ) => {
+            log_debug( 'update_tweet_info_from_user_timeline() result:', result );
+            
+            if ( result.timeline_info.timeline_tweet_ids.length <= 0 ) {
+                log_debug( 'specified tweet was not found on user timeline' );
                 
-                log_debug( 'update_tweet_info_from_user_timeline() result:', result );
-                
-                if ( result.timeline_info.timeline_tweet_ids.length <= 0 ) {
-                    log_debug( 'specified tweet was not found on user timeline' );
-                    
-                    search_parameters.use_user_timeline = false;
-                    open_search_page();
-                    return;
-                }
-                
-                var until_tweet_id = get_tweet_id_from_utc_sec( until_timestamp_ms / 1000.0 ),
-                    max_id = new Decimal( until_tweet_id ).sub( 1 ).toString(),
-                    user_timeline_url = search_parameters.search_url = search_parameters.user_timeline_url = user_timeline_url_template.replace( /#SCREEN_NAME#/g, target_info.screen_name ).replace( /#MAX_ID#/g, max_id );
-                
-                log_debug( 'until_tweet_id:', until_tweet_id, 'max_id:', max_id );
-                log_debug( 'user_timeline_url', user_timeline_url );
-                
+                search_parameters.use_user_timeline = false;
                 open_search_page();
+                return;
             }
+            
+            var until_tweet_id = get_tweet_id_from_utc_sec( until_timestamp_ms / 1000.0 ),
+                max_id = new Decimal( until_tweet_id ).sub( 1 ).toString(),
+                user_timeline_url = search_parameters.search_url = search_parameters.user_timeline_url = user_timeline_url_template.replace( /#SCREEN_NAME#/g, target_info.screen_name ).replace( /#MAX_ID#/g, max_id );
+            
+            log_debug( 'until_tweet_id:', until_tweet_id, 'max_id:', max_id );
+            log_debug( 'user_timeline_url', user_timeline_url );
+            
+            open_search_page();
+        } )
+        .catch( ( result ) => {
+            log_error( 'update_tweet_info_from_user_timeline() error:', result.error, result );
+            
+            search_parameters.use_user_timeline = false;
+            open_search_page();
         } );
     };
 } )(); // end of open_search_window()
@@ -2548,38 +2531,53 @@ var search_vicinity_tweet = ( () => {
             };
         } )(),
         
+        is_search_result_empty = () => {
+            // 検索タイムラインにて、「結果なし」「検索結果と一致するものはありません。」が存在する場合に真
+            return  ( ( ! is_user_timeline ) && ( $primary_column.find( '> div > div' ).last().find( '> div > div > div > div[dir="auto"]' ).length == 2 ) );
+        },
+        
         [ 
             hide_primary_column,
             show_primary_column,
             hide_sidebar,
             show_sidebar,
         ] = ( () => {
-            var search_style_id = SCRIPT_NAME + '-search_style',
+            var hide_primary_column_style_id = SCRIPT_NAME + '-search_style-hide_primary_column',
+                hide_sidebar_style_id = SCRIPT_NAME + '-search_style-hide_sidebar',
                 
                 hide_primary_column = () => {
-                    $primary_column.css( 'visibility', 'hidden' );
+                    //$primary_column.css( 'visibility', 'hidden' );
+                    $( '#' + hide_primary_column_style_id ).remove();
+                    insert_css( [
+                        [
+                            'div[data-testid="primaryColumn"] > div > div > div > div[dir="auto"]', // 「問題が発生しました。」
+                            'div[data-testid="primaryColumn"] > div > div > div > div[role="button"]', // [再度お試しください]
+                        ].join( ',' ),
+                        '{visibility: hidden;}',
+                    ].join( '\n' ), hide_primary_column_style_id);
                 }, // end of hide_primary_column()
                 
                 show_primary_column = () => {
-                    $primary_column.css( 'visibility', 'visible' );
+                    //$primary_column.css( 'visibility', 'visible' );
+                    $( '#' + hide_primary_column_style_id ).remove();
                 }, // end of show_primary_column()
                 
                 hide_sidebar = () => {
-                    $( '#' + search_style_id ).remove();
+                    $( '#' + hide_sidebar_style_id ).remove();
                     
                     insert_css( [
                         //'div[data-testid="sidebarColumn"] {display: none;}',
                         'div[data-testid="sidebarColumn"] {visibility: hidden;}',
-                    ].join( '\n' ), search_style_id );
+                    ].join( '\n' ), hide_sidebar_style_id );
                 }, // end of hide_sidebar()
                 
                 show_sidebar = () => {
-                    $( '#' + search_style_id ).remove();
+                    $( '#' + hide_sidebar_style_id ).remove();
                     /*
                     //insert_css( [
                     //    //'div[data-testid="sidebarColumn"] {display: flex;}',
                     //    'div[data-testid="sidebarColumn"] {visibility: visible;}',
-                    //].join( '\n' ), search_style_id );
+                    //].join( '\n' ), hide_sidebar_style_id );
                     */
                     show_primary_column();
                 }; // end of show_sidebar()
@@ -3044,36 +3042,51 @@ var search_vicinity_tweet = ( () => {
             return;
         }
         
+        var last_search_status = search_status;
+        
         $primary_column = $( 'div[data-testid="primaryColumn"]' );
         $timeline = $primary_column.find( 'section[role="region"]' ); // ページ遷移を行うと $timeline も書き換わる
         
         switch ( search_status ) {
             case 'error' :
-                return;
+                break;
             
             case 'initialize' :
                 hide_sidebar();
                 
                 //$primary_column = $( 'div[data-testid="primaryColumn"]' );
                 if ( $primary_column.length <= 0 ) {
-                    return;
+                    break;
                 }
                 
-                if ( $timeline.length <= 0 ) {
-                }
                 start_giveup_handler();
                 
                 //$timeline = $primary_column.find( 'section[role="region"]' );
                 
                 if ( 0 < $timeline.length ) {
+                    show_primary_column();
                     start_cancel_handler();
                     search_status = 'search';
                 }
                 else {
-                    hide_primary_column();
+                    /*
+                    //if ( 0 < $primary_column.find( '> div > div > div > div[role="button"] > svg' ) ) {
+                    //    hide_primary_column();
+                    //}
+                    //※一瞬「問題が発生しました」と出て[再度お試しください]ボタンが表示されている場合に隠したかったが、既に表示されている状態だとあまり意味がない
+                    */
+                    if ( is_search_result_empty() ) {
+                        stop_giveup_handler();
+                        show_primary_column();
+                        search_status = 'error';
+                        break;
+                    }
+                    else {
+                        hide_primary_column();
+                    }
                     search_status = 'wait_ready';
                 }
-                return;
+                break;
             
             case 'wait_ready' :
                 //$timeline = $primary_column.find( 'section[role="region"]' );
@@ -3084,9 +3097,23 @@ var search_vicinity_tweet = ( () => {
                     search_status = 'search';
                 }
                 else {
-                    hide_primary_column();
+                    /*
+                    //if ( 0 < $primary_column.find( '> div > div > div > div[role="button"] > svg' ) ) {
+                    //    hide_primary_column();
+                    //}
+                    //※一瞬「問題が発生しました」と出て[再度お試しください]ボタンが表示されている場合に隠したかったが、既に表示されている状態だとあまり意味がない
+                    */
+                    if ( is_search_result_empty() ) {
+                        stop_giveup_handler();
+                        show_primary_column();
+                        search_status = 'error';
+                        break;
+                    }
+                    else {
+                        hide_primary_column();
+                    }
                 }
-                return;
+                break;
             
             case 'search' :
                 $found_tweet_container = search_tweet();
@@ -3096,7 +3123,7 @@ var search_vicinity_tweet = ( () => {
                     //stop_cancel_handler(); // ここでは止めない（スクロール位置調整中にも止めたいため）
                     search_status = 'found';
                 }
-                return;
+                break;
             
             case 'found' :
                 /*
@@ -3108,7 +3135,11 @@ var search_vicinity_tweet = ( () => {
                 */
                 var $highlight_tweets = update_highlight_tweets();
                 
-                return;
+                break;
+        }
+        
+        if ( search_status != last_search_status ) {
+            log_debug( 'search_status: ', last_search_status, '=>', search_status );
         }
     };
 } )(); // end of search_vicinity_tweet()
