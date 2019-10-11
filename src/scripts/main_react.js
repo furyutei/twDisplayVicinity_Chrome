@@ -2277,6 +2277,11 @@ function check_user_timeline_end() {
             return;
         }
         
+        if ( 0 < $end_mark.find( 'h2[role="heading"]' ).length ) {
+            // 現在画面上にある最後のツイートの後におすすめユーザー等が表示されている場合
+            return;
+        }
+        
         if ( 0 < $end_mark.find( 'svg' ).length ) {
             // 読み込み中アイコン表示中
             setTimeout ( () => {
