@@ -2023,6 +2023,7 @@ var open_search_window = ( () => {
         
         update_tweet_info_from_user_timeline( {
             user_id : target_info.user_id,
+            screen_name : target_info.screen_name,
             max_id : test_tweet_id,
         } )
         .then( ( result ) => {
@@ -2299,11 +2300,10 @@ var create_open_vicinity_tweets_button = ( () => {
                     $tweet_body_container = $( '<div/>' ).addClass( 'tweet-body' ).appendTo( $tweet ),
                     $tweet_media_container = $( '<div/>' ).addClass( 'tweet-media' ).appendTo( $tweet ),
                     $tweet_link = $( '<a/>' ).text( format_date( new Date( tweet_info.timestamp_ms ), 'YYYY/MM/DD hh:mm:ss') ).attr( {
-                        'target' : '_blank',
                         'href' : '/' + tweet_info.screen_name + '/status/' + tweet_info.id,
                     } ),
                     $rt_link,
-                    tweet_body_html = tweet_info.tweet.full_text.replace( /\n/g, '<br />' ),
+                    tweet_parts = tweet_info.tweet.full_text.split( '' ),
                     tweet_entities = tweet_info.tweet.entities;
                 
                 log_debug( 'create_tweet_container() tweet_info:', tweet_info, 'rt_info:', rt_info );
@@ -2323,12 +2323,39 @@ var create_open_vicinity_tweets_button = ( () => {
                 
                 if ( tweet_entities ) {
                     ( tweet_entities.urls || [] ).forEach( ( url_info ) => {
-                        tweet_body_html = tweet_body_html.replace( url_info.url, '<a target="_blank" href="' + url_info.expanded_url + '">' + url_info.display_url + '</a>' );
+                        var index;
+                        
+                        tweet_parts[ url_info.indices[ 0 ] ] = '<a href="' + url_info.expanded_url + '">' + url_info.display_url + '</a>';
+                        
+                        for ( index = url_info.indices[ 0 ] + 1; index < url_info.indices[ 1 ]; index ++ ) {
+                            tweet_parts[ index ] = '';
+                        }
+                    } );
+                    
+                    ( tweet_entities.user_mentions || [] ).forEach( ( user_info ) => {
+                        var index;
+                        
+                        tweet_parts[ user_info.indices[ 0 ] ] = '<a href="/' + user_info.screen_name + '">@' + user_info.screen_name + '</a>';
+                        
+                        for ( index = user_info.indices[ 0 ] + 1; index < user_info.indices[ 1 ]; index ++ ) {
+                            tweet_parts[ index ] = '';
+                        }
+                    } );
+                    
+                    ( tweet_entities.hashtags || [] ).forEach( ( hashtag_info ) => {
+                        var index;
+                        
+                        tweet_parts[ hashtag_info.indices[ 0 ] ] = '<a href="/hashtag/' + encodeURIComponent( hashtag_info.text ) + '">#' + hashtag_info.text + '</a>';
+                        
+                        for ( index = hashtag_info.indices[ 0 ] + 1; index < hashtag_info.indices[ 1 ]; index ++ ) {
+                            tweet_parts[ index ] = '';
+                        }
                     } );
                     
                     if ( tweet_entities.media ) {
                         tweet_entities.media.forEach( ( media_info ) => {
-                            var is_image = ! /video/.test( media_info.media_url_https ),
+                            var index,
+                                is_image = ! /video/.test( media_info.media_url_https ),
                                 $link = $( '<a><img/></a>' ).attr( {
                                     'target' : '_blank',
                                     'href' : ( is_image ) ? media_info.media_url_https.replace( /\.([^.]+)$/, '?format=$1&name=orig' ) : media_info.expanded_url,
@@ -2338,16 +2365,23 @@ var create_open_vicinity_tweets_button = ( () => {
                                 } );
                             
                             $tweet_media_container.append( $link );
-                            tweet_body_html = tweet_body_html.replace( media_info.url, '<a target="_blank" href="' + media_info.expanded_url + '">' + media_info.display_url + '</a>' );
+                            
+                            tweet_parts[ media_info.indices[ 0 ] ] = '<a href="' + media_info.expanded_url + '">' + media_info.display_url + '</a>';
+                            
+                            for ( index = media_info.indices[ 0 ] + 1; index < media_info.indices[ 1 ]; index ++ ) {
+                                tweet_parts[ index ] = '';
+                            }
                         } );
                     }
                     
-                    ( tweet_entities.user_mentions || [] ).forEach( ( user_info ) => {
-                        tweet_body_html = tweet_body_html.replace( '@' + user_info.screen_name, '<a target="_blank" href="/' + user_info.screen_name + '">@' + user_info.screen_name + '</a>' );
-                    } );
+                    // TODO: entities.card 等の展開は保留
                 }
                 
-                $tweet_body_container.html( tweet_body_html );
+                $tweet_body_container.html( tweet_parts.join( '' ).replace( /\n/g, '<br />' ) );
+                
+                $tweet.find( 'a' ).attr( {
+                    'target' : '_blank',
+                } );
                 
                 return $tweet;
             },
