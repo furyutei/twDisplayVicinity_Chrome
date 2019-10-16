@@ -37,9 +37,9 @@ var OPTIONS = {
     ENABLE_RECENT_RETWEET_USERS_BUTTON : true, // true: [Re:RT]（最近リツイートしたユーザーを表示するボタン）を有効に
     
     MAX_USER_NUMBER : 30, // 取得ユーザー数(API制限により、100ユーザまで) (ENABLE_RECENT_RETWEET_USERS_BUTTON が true の場合に使用)
+    // TODO: 元々のの「リツイートしたユーザー」ダイアログを利用しているため、未使用
     MAX_AFTER_RETWEET_MINUTES : 10, // リツイート後のツイート取得期間(分)
     MAX_BEFORE_RETWEET_MINUTES : 10, // リツイート前のツイート取得時間(分)
-    // TODO: 元々のの「リツイートしたユーザー」ダイアログを利用しているため、未使用
     
     OPEN_LINK_KEYCODE : 70, // 近傍ツイート検索キーコード([f]:70)
     HELP_OPEN_LINK_KEYCHAR : 'f', // 近傍ツイート検索キー表示
@@ -47,9 +47,8 @@ var OPTIONS = {
     OPEN_ACT_LINK_KEYCODE : 65, // アクションの近傍ツイート検索キーコード([a]:65)
     HELP_OPEN_ACT_LINK_KEYCHAR : 'a', // アクションの近傍ツイート検索キー
     
-    TOGGLE_RERT_DIALOG_KEYCODE : 69, // [Re:RT]ダイアログを開く/閉じるキーコード([e]:69)
+    TOGGLE_RERT_DIALOG_KEYCODE : 69, // [Re:RT]ダイアログを開くキーコード([e]:69)
     HELP_OPEN_RERT_DIALOG_KEYCHAR : 'e', // [Re:RT]ダイアログを開くキー表示
-    // TODO: [Re:RT] のダイアログで同一タブ上に前後ツイートを表示する機能は未実装
     
     STATUSES_RETWEETS_CACHE_SEC : 10, // statuses/retweets API のキャッシュを保持する時間(秒)(0:保持しない)
     
@@ -186,7 +185,7 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     // ※ https://abs.twimg.com/responsive-web/web/main.<version>.js (例：https://abs.twimg.com/responsive-web/web/main.007c24006b6719434.js) 内で定義されている値
     // ※ これを使用しても、一定時間内のリクエスト回数に制限有り→参考；[TwitterのAPI制限 [2019/05/31現在] - Qiita](https://qiita.com/mpyw/items/32d44a063389236c0a65)
     
-    API_USER_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/statuses/user_timeline.json?count=#COUNT#&include_my_retweet=1&include_rts=1&user_id=#USER_ID#&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
+    API_USER_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/statuses/user_timeline.json?count=#COUNT#&include_my_retweet=1&include_rts=1&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
     API_SEARCH_TIMELINE_TEMPLATE = 'https://api.twitter.com/1.1/search/universal.json?q=#QUERY#&count=#COUNT#&modules=status&result_type=recent&pc=false&cards_platform=Web-13&include_entities=1&include_user_entities=1&include_cards=1&send_error_codes=1&tweet_mode=extended&include_ext_alt_text=true&include_reply_count=true',
     API_STATUSES_RETWEETS_TEMPLATE = 'https://api.twitter.com/1.1/statuses/retweets/#TWEET_ID#.json?count=#COUNT#',
     
@@ -195,6 +194,11 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     ACT_CONTAINER_CLASS = SCRIPT_NAME + '_vicinity_link_container_act',
     VICINITY_LINK_CLASS = SCRIPT_NAME + '_vicinity_link',
     RECENT_RETWEETS_BUTTON_CLASS = SCRIPT_NAME + '-recent-retweets-button',
+    OPEN_VICINITY_TWEETS_BUTTON_CONTAINER_CLASS = SCRIPT_NAME + '-open-vicinity-tweets-button-container',
+    OPEN_VICINITY_TWEETS_BUTTON_CLASS = SCRIPT_NAME + '-open-vicinity-tweets-button',
+    VICINITY_TWEET_LIST_PARENT_CLASS = SCRIPT_NAME + '-vicinity-tweet-list-parent',
+    VICINITY_TWEET_LIST_CLASS = SCRIPT_NAME + '-vicinity-tweet-list',
+    VICINITY_TWEET_CONTAINER_CLASS = SCRIPT_NAME + '-vicinity-tweet-container',
     TARGET_TWEET_CLASS = SCRIPT_NAME + '-target-tweet',
     VICINITY_TWEET_CLASS = SCRIPT_NAME + '-vicinity-tweet',
     TO_PAST_TIMELINE_CLASS = SCRIPT_NAME + '-to-past-timeline',
@@ -223,7 +227,6 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     DEFAULT_MAX_AFTER_RETWEET_MINUTES = 10, // リツイート後のツイート取得時間(分)デフォルト
     LIMIT_MAX_BEFORE_RETWEET_MINUTES = 60, // リツイート前のツイート取得時間(分)制限
     DEFAULT_MAX_BEFORE_RETWEET_MINUTES = 10, // リツイート前のツイート取得時間(分)デフォルト
-    // TODO: [Re:RT] のダイアログで同一タブ上に前後ツイートを表示する機能は未実装
     
     ID_INC_PER_MSEC = Decimal.pow( 2, 22 ), // ミリ秒毎のID増分
     ID_INC_PER_SEC = ID_INC_PER_MSEC.mul( 1000 ), // 秒毎のID増分
@@ -261,6 +264,12 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     */
     
     LINK_ICON_SVG = '<svg version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 -343.6)"><path transform="translate(0 343.6)" d="m0 10v4h3.8633a3.154 2.162 0 0 1 3.1367-1.9414 3.154 2.162 0 0 1 3.1348 1.9414h13.865v-4h-3.8594a3.154 2.162 0 0 1-3.1406 1.9766 3.154 2.162 0 0 1-3.1406-1.9766z" fill="currentColor"/><g transform="matrix(.48001 0 0 .42911 1.3839 211.29)" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="3"><path d="m11.7 351.77h11l-11 11z"/><path d="m11.7 351.77h-11l11 11z"/></g><rect x="6.5596" y="357.32" width=".88075" height="6.3802" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.255" style="paint-order:stroke fill markers"/><g transform="matrix(.48001 0 0 -.42911 11.384 499.94)" fill="currentColor" stroke="currentColor" stroke-linejoin="round" stroke-width="3"><path d="m11.7 351.77h11l-11 11z"/><path d="m11.7 351.77h-11l11 11z"/></g><rect transform="scale(1,-1)" x="16.56" y="-353.92" width=".88075" height="6.3802" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.255" style="paint-order:stroke fill markers"/></g></svg>',
+    
+    OPEN_ICON_SVG = '<svg version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 -343.6)"><g fill="currentColor"><path d="m1 346.6v13h8.2083v-2.3095h-5.0511v-8.3809h15.686v8.3809h-5.0511v2.3095h8.2083v-13z" style="paint-order:markers stroke fill"/><rect x="10.433" y="351.6" width="3.1333" height="12" style="paint-order:markers stroke fill"/><path d="m12 366.6-7.1182-5.0182 14.236-1e-5z" style="paint-order:markers stroke fill"/></g></g></svg>',
+    
+    CLOSE_ICON_SVG = '<svg version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 -343.6)"><g fill="currentColor"><path d="m1 346.6v13h8.2083v-2.3095h-5.0511v-8.3809h15.686v8.3809h-5.0511v2.3095h8.2083v-13z" style="paint-order:markers stroke fill"/><rect transform="scale(1,-1)" x="10.4" y="-364.6" width="3.1333" height="12" style="paint-order:markers stroke fill"/><path d="m11.967 349.58-7.1182 5.0182 14.236 1e-5z" style="paint-order:markers stroke fill"/></g></g></svg>',
+    
+    LOADING_ICON_SVG = '<svg version="1.1" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" fill="none" r="10" stroke-width="4" style="stroke: currentColor; opacity: 0.4;"></circle><path d="M 12,2 a 10 10 -90 0 1 9,5" fill="none" stroke="currentColor" stroke-width="4" />',
     
     SEARCH_PARAMETERS = ( function () {
         if ( ! w.opener ) {
@@ -882,7 +891,7 @@ var [
             log_debug( 'fetch_json()', url, options );
             
             if ( ( ! DOMAIN_PREFIX ) || ( IS_FIREFOX ) ) {
-                return fetch( url, options ).then( response => response.json() );
+                return fetch( url, options ).then( ( response ) => response.json() );
             }
             
             /*
@@ -913,12 +922,12 @@ var [
             } );
         }, // end of fetch_json()
         
-        fetch_user_timeline = ( user_id, max_id, count ) => {
+        fetch_user_timeline = ( user_id, screen_name, max_id, count ) => {
             if ( isNaN( count ) || ( count < 0 ) || ( LIMIT_USER_TIMELINE_TWEET_NUMBER < count ) ) {
                 count = DEFAULT_USER_TIMELINE_TWEET_NUMBER;
             }
             
-            var api_url = API_USER_TIMELINE_TEMPLATE.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, count ) + ( /^\d+$/.test( max_id || '' ) ? '&max_id=' + max_id : '' );
+            var api_url = ( API_USER_TIMELINE_TEMPLATE + ( ( user_id ) ? '&user_id=' + encodeURIComponent( user_id ) : '&screen_name=' + encodeURIComponent( screen_name ) ) ).replace( /#COUNT#/g, count ) + ( /^\d+$/.test( max_id || '' ) ? '&max_id=' + max_id : '' );
             
             return fetch_json( api_url, {
                 method : 'GET',
@@ -1165,8 +1174,13 @@ var [
                     
                     var user_id = RegExp.$1,
                         timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
-                        user = users[ user_id ],
-                        screen_name = user.screen_name,
+                        user = users[ user_id ];
+                    
+                    if ( ! user ) {
+                        return;
+                    }
+                    
+                    var screen_name = user.screen_name,
                         existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
                         // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
                         reacted_info = {
@@ -1411,6 +1425,7 @@ var [
                     user_id : src_user.id_str,
                     screen_name : src_user.screen_name,
                     user_name : src_user.name,
+                    user_icon : src_user.profile_image_url_https,
                     timestamp_ms : Date.parse( src_tweet.created_at ),
                     reacted_id : src_retweeted_status.id_str,
                     tweet : dst_tweet,
@@ -1469,18 +1484,20 @@ var [
             };
         
         var update_tweet_info_from_user_timeline = ( () => {
-            return ( user_id, options ) => {
-                log_debug( 'update_tweet_info_from_user_timeline() called', user_id, options );
+            return ( options ) => {
+                log_debug( 'update_tweet_info_from_user_timeline() called', options );
                 
                 if ( ! options ) {
                     options = {};
                 }
                 
-                var max_id = options.max_id,
+                var user_id = options.user_id,
+                    screen_name = options.screen_name,
+                    max_id = options.max_id,
                     count = options.count;
                 
                 return new Promise( ( resolve, reject ) => {
-                    fetch_user_timeline( user_id, max_id, count )
+                    fetch_user_timeline( user_id, screen_name, max_id, count )
                     .then( ( json ) => {
                         log_debug( 'update_tweet_info_from_user_timeline(): json=', json );
                         
@@ -1785,6 +1802,178 @@ var [
 //}
 
 
+var TemplateUserTimeline = {
+    DEFAULT_UNTIL_ID : '9153891586667446272', // // datetime_to_tweet_id(Date.parse( '2080-01-01T00:00:00.000Z' )) => 9153891586667446272
+    
+    timeline_status : null, // 'user' / 'search' / 'end' / 'error' / 'stop'
+    
+    init : function ( parameters ) {
+        if ( ! parameters ) {
+            parameters = {};
+        }
+        
+        var self = this,
+            screen_name = self.screen_name = parameters.screen_name,
+            max_tweet_id = self.requested_max_tweet_id = self.max_tweet_id = parameters.max_tweet_id,
+            max_timestamp_ms = self.requested_max_timestamp_ms = self.max_timestamp_ms = parameters.max_timestamp_ms,
+            tweet_ids = self.tweet_ids = [];
+        
+        if ( ! max_tweet_id ) {
+            max_tweet_id = self.max_tweet_id = get_tweet_id_from_utc_sec( max_timestamp_ms / 1000.0 );
+        }
+        
+        if ( max_tweet_id ) {
+            self.timeline_status = 'user';
+        }
+        else {
+            if ( max_timestamp_ms ) {
+                self.timeline_status = 'search';
+            }
+            else {
+                self.timeline_status = 'error';
+            }
+        }
+        
+        return self;
+    }, // end of init()
+    
+    fetch_tweet_info : function () {
+        var self = this;
+        
+        return new Promise( ( resolve, reject ) => {
+            var tweet_id = self.tweet_ids.shift(),
+                tweet_info,
+                fetch_tweets,
+                
+                recursive_call = () => {
+                    self.fetch_tweet_info()
+                    .then( ( tweet_info ) => {
+                        resolve( tweet_info );
+                    } )
+                    .catch( ( error ) => {
+                        reject( error );
+                    } );
+                };
+            
+            if ( tweet_id ) {
+                tweet_info = get_stored_tweet_info( tweet_id );
+                resolve( tweet_info );
+                return;
+            }
+            
+            switch ( self.timeline_status ) {
+                case 'user' :
+                    fetch_tweets = self.fetch_tweets_from_user_timeline;
+                    break;
+                
+                case 'search' :
+                    fetch_tweets = self.fetch_tweets_from_search_timeline;
+                    break;
+                
+                case 'end' :
+                    resolve( null );
+                    return;
+                
+                default :
+                    reject( {
+                        timeline_status : self.timeline_status,
+                    } );
+                    return;
+            }
+            
+            fetch_tweets.call( self )
+            .then( ( result ) => {
+                recursive_call();
+            } )
+            .catch( ( error ) => {
+                recursive_call();
+            } );
+        } );
+    }, // end of fetch_tweet_info()
+    
+    fetch_tweets_from_user_timeline : function () {
+        var self = this;
+        
+        return new Promise( ( resolve, reject ) => {
+            var finish = ( result_function ) => {
+                    result_function( {
+                        timeline_status : self.timeline_status,
+                        max_tweet_id : self.max_tweet_id,
+                        max_timestamp_ms : self.max_timestamp_ms,
+                    } );
+                };
+            
+            update_tweet_info_from_user_timeline( {
+                screen_name : self.screen_name,
+                max_id : self.max_tweet_id,
+            } )
+            .then( ( result ) => {
+                var timeline_tweet_ids = result.timeline_info.timeline_tweet_ids;
+                
+                if ( timeline_tweet_ids.length <= 0 ) {
+                    self.timeline_status = 'search';
+                    finish( resolve );
+                    return;
+                }
+                
+                self.tweet_ids = self.tweet_ids.concat( timeline_tweet_ids );
+                self.max_tweet_id = new Decimal( timeline_tweet_ids[ timeline_tweet_ids.length - 1 ] ).sub( 1 ).toString();
+                
+                finish( resolve );
+            } )
+            .catch( ( error ) => {
+                self.timeline_status = 'error';
+                finish( reject );
+            } );
+        } );
+    }, // end of fetch_tweets_from_user_timeline()
+    
+    fetch_tweets_from_search_timeline : function () {
+        var self = this;
+        
+        return new Promise( ( resolve, reject ) => {
+            var query = 'from:' + self.screen_name + ' include:retweets include:nativeretweets ',
+                
+                finish = ( result_function ) => {
+                    result_function( {
+                        timeline_status : self.timeline_status,
+                        max_tweet_id : self.max_tweet_id,
+                        max_timestamp_ms : self.max_timestamp_ms,
+                    } );
+                };
+            
+            if ( self.max_tweet_id ) {
+                query += 'max_id:' + self.max_tweet_id;
+            }
+            else {
+                query += 'until:' + get_gmt_datetime( self.max_timestamp_ms + 1, true );
+            }
+            
+            update_tweet_info_from_search_timeline( query )
+            .then( ( result ) => {
+                var timeline_tweet_ids = result.timeline_info.timeline_tweet_ids;
+                
+                if ( timeline_tweet_ids.length <= 0 ) {
+                    self.timeline_status = 'end';
+                    finish( resolve );
+                    return;
+                }
+                
+                self.tweet_ids = self.tweet_ids.concat( timeline_tweet_ids );
+                self.max_tweet_id = new Decimal( timeline_tweet_ids[ timeline_tweet_ids.length - 1 ] ).sub( 1 ).toString();
+                
+                finish( resolve );
+            } )
+            .catch( ( error ) => {
+                self.timeline_status = 'error';
+                finish( reject );
+            } );
+        } );
+    }, // end of fetch_tweets_from_search_timeline()
+    
+}; // end of TemplateUserTimeline
+
+
 var open_search_window = ( () => {
     var user_timeline_url_template = 'https://' + DOMAIN_PREFIX + 'twitter.com/#SCREEN_NAME#/with_replies?max_id=#MAX_ID#',
         search_query_template = 'from:#SCREEN_NAME# until:#GMT_DATETIME# include:retweets include:nativeretweets',
@@ -1832,7 +2021,8 @@ var open_search_window = ( () => {
             return;
         }
         
-        update_tweet_info_from_user_timeline( target_info.user_id, {
+        update_tweet_info_from_user_timeline( {
+            user_id : target_info.user_id,
             max_id : test_tweet_id,
         } )
         .then( ( result ) => {
@@ -2017,8 +2207,6 @@ var create_recent_retweet_users_button = ( () => {
             event.stopPropagation();
             event.preventDefault();
             
-            // TODO: [Re:RT] で同一タブ上で RT 前後のツイートを表示する機能は未実装
-            
             var $ancestor = $recent_retweet_users_button_container.parents( 'article[role="article"]:first' );
             
             if ( CURRENT_REFERENCE_TO_RETWEETERS_INFO.status == 'idle' ) {
@@ -2040,6 +2228,333 @@ var create_recent_retweet_users_button = ( () => {
         return $recent_retweet_users_button_container;
     };
 } )(); // end of create_recent_retweet_users_button()
+
+
+var create_open_vicinity_tweets_button = ( () => {
+    var $button_container_template = $( '<div><a></a></div>' ).addClass( OPEN_VICINITY_TWEETS_BUTTON_CONTAINER_CLASS ),
+        $button_template = $button_container_template.find( 'a:first' ).addClass( OPEN_VICINITY_TWEETS_BUTTON_CLASS ).html( OPEN_ICON_SVG ).attr( {
+            'title' : OPTIONS.REFERECE_TO_RETWEET_LOAD_BUTTON_TITLE,
+            'data-status' : 'close',
+        } ),
+        
+        get_max_after_retweet_minutes = () => {
+            if ( ( ! OPTIONS.MAX_AFTER_RETWEET_MINUTES ) || isNaN( OPTIONS.MAX_AFTER_RETWEET_MINUTES ) ) {
+                return DEFAULT_MAX_AFTER_RETWEET_MINUTES;
+            }
+            var max_after_retweet_minutes = parseInt( OPTIONS.MAX_AFTER_RETWEET_MINUTES, 10 );
+            
+            if ( ( max_after_retweet_minutes < 1 ) || ( LIMIT_MAX_AFTER_RETWEET_MINUTES < max_after_retweet_minutes ) ) {
+                return DEFAULT_MAX_AFTER_RETWEET_MINUTES;
+            }
+            
+            return max_after_retweet_minutes;
+        },
+        
+        get_max_before_retweet_minutes = () => {
+            if ( ( ( ! OPTIONS.MAX_BEFORE_RETWEET_MINUTES ) && ( OPTIONS.MAX_BEFORE_RETWEET_MINUTES !== 0 ) ) || isNaN( OPTIONS.MAX_BEFORE_RETWEET_MINUTES ) ) {
+                return DEFAULT_MAX_BEFORE_RETWEET_MINUTES;
+            }
+            var max_before_retweet_minutes = parseInt( OPTIONS.MAX_BEFORE_RETWEET_MINUTES, 10 );
+            
+            if ( ( max_before_retweet_minutes < 0 ) || ( LIMIT_MAX_BEFORE_RETWEET_MINUTES < max_before_retweet_minutes ) ) {
+                return DEFAULT_MAX_BEFORE_RETWEET_MINUTES;
+            }
+            
+            return max_before_retweet_minutes;
+        },
+        
+        $button_containers_cache = {};
+    
+    return ( options ) => {
+        options = ( options ) ? options : {};
+        
+        var tweet_url = options.tweet_url,
+            tweet_url_info = parse_individual_tweet_url( tweet_url ) || {},
+            retweeted_tweet_id = tweet_url_info.tweet_id,
+            act_screen_name = options.act_screen_name,
+            button_container_key = retweeted_tweet_id + ',' + act_screen_name,
+            $button_container = $button_containers_cache[ button_container_key ] || $(),
+            $tweet_list_container;
+        
+        if ( 0 < $button_container.length ) {
+            $button_container.removeClass( 'current' );
+            
+            return $button_container;
+        }
+        
+        $button_containers_cache[ button_container_key ] = $button_container = $button_container_template.clone( true );
+        
+        var $button = $button_container.find( 'a:first' ),
+            is_loaded = false,
+            
+            create_tweet_container = ( tweet_info, rt_info ) => {
+                var $tweet = $( '<li/>' ).addClass( VICINITY_TWEET_CONTAINER_CLASS ).attr( {
+                        'tabindex' : '1', // tabindex 属性がないと文字の選択ができない (Chrome  77.0.3865.120)
+                        'title' : '',
+                    } ),
+                    $user_icon_container = $( '<div/>' ).addClass( 'user-icon' ).appendTo( $tweet ),
+                    $tweet_info_container = $( '<div/>' ).addClass( 'tweet-info' ).appendTo( $tweet ),
+                    $mark_container = $( '<div/>' ).addClass( 'tweet-mark' ).appendTo( $tweet ),
+                    $timestamp_container = $( '<div/>' ).addClass( 'tweet-timestamp' ).appendTo( $tweet ),
+                    $tweet_body_container = $( '<div/>' ).addClass( 'tweet-body' ).appendTo( $tweet ),
+                    $tweet_media_container = $( '<div/>' ).addClass( 'tweet-media' ).appendTo( $tweet ),
+                    $tweet_link = $( '<a/>' ).text( format_date( new Date( tweet_info.timestamp_ms ), 'YYYY/MM/DD hh:mm:ss') ).attr( {
+                        'target' : '_blank',
+                        'href' : '/' + tweet_info.screen_name + '/status/' + tweet_info.id,
+                    } ),
+                    $rt_link,
+                    tweet_body_html = tweet_info.tweet.full_text.replace( /\n/g, '<br />' ),
+                    tweet_entities = tweet_info.tweet.entities;
+                
+                log_debug( 'create_tweet_container() tweet_info:', tweet_info, 'rt_info:', rt_info );
+                
+                if ( rt_info ) {
+                    $tweet_info_container.append( $tweet_link );
+                    //$mark_container.html( '&#8656;' );
+                    $mark_container.html( '&#8658;' );
+                    $rt_link = $tweet_link.clone( true ).text( format_date( new Date( rt_info.timestamp_ms ), 'YYYY/MM/DD hh:mm:ss') ).attr( {
+                        'href' : '/' + rt_info.screen_name + '/status/' + rt_info.id,
+                    } );
+                    $timestamp_container.append( $rt_link );
+                }
+                else {
+                    $timestamp_container.append( $tweet_link );
+                }
+                
+                if ( tweet_entities ) {
+                    ( tweet_entities.urls || [] ).forEach( ( url_info ) => {
+                        tweet_body_html = tweet_body_html.replace( url_info.url, '<a target="_blank" href="' + url_info.expanded_url + '">' + url_info.display_url + '</a>' );
+                    } );
+                    
+                    if ( tweet_entities.media ) {
+                        tweet_entities.media.forEach( ( media_info ) => {
+                            var is_image = ! /video/.test( media_info.media_url_https ),
+                                $link = $( '<a><img/></a>' ).attr( {
+                                    'target' : '_blank',
+                                    'href' : ( is_image ) ? media_info.media_url_https.replace( /\.([^.]+)$/, '?format=$1&name=orig' ) : media_info.expanded_url,
+                                } ),
+                                $image = $link.find( 'img:first' ).attr( {
+                                    'src' : ( is_image ) ? media_info.media_url_https.replace( /\.([^.]+)$/, '?format=$1&name=thumb' ) : media_info.media_url_https,
+                                } );
+                            
+                            $tweet_media_container.append( $link );
+                            tweet_body_html = tweet_body_html.replace( media_info.url, '<a target="_blank" href="' + media_info.expanded_url + '">' + media_info.display_url + '</a>' );
+                        } );
+                    }
+                    
+                    ( tweet_entities.user_mentions || [] ).forEach( ( user_info ) => {
+                        tweet_body_html = tweet_body_html.replace( '@' + user_info.screen_name, '<a target="_blank" href="/' + user_info.screen_name + '">@' + user_info.screen_name + '</a>' );
+                    } );
+                }
+                
+                $tweet_body_container.html( tweet_body_html );
+                
+                return $tweet;
+            },
+            
+            add_tweet_to_list = ( tweet_info, rt_info, $retweeted_tweet ) => {
+                if ( tweet_info.reacted_id ) {
+                    return; // RT は表示しない
+                }
+                
+                var $tweet = create_tweet_container( tweet_info );
+                
+                if ( ( ( tweet_info.id && rt_info.id )  && ( bignum_cmp( tweet_info.id, rt_info.id ) > 0 ) ) || ( rt_info.timestamp_ms < tweet_info.timestamp_ms ) ) {
+                    $retweeted_tweet.before( $tweet );
+                }
+                else {
+                    
+                    $tweet_list_container.append( $tweet );
+                }
+            },
+            
+            get_tweet_list_parent = () => {
+                var $region = $button_container.parents( 'section[role="region"]:first' ),
+                    $base_container = $region.parents().eq( 2 ).css( {
+                        'max-height' : '300px',
+                    } ),
+                    $scroll_base = $base_container.children().first(),
+                    $tweet_list_parent = $base_container.nextAll( '.' + VICINITY_TWEET_LIST_PARENT_CLASS ),
+                    $user_cell_container = $button_container.parents( 'div[data-testid="UserCell"]:first' );
+                
+                if ( $tweet_list_parent.length <= 0 ) {
+                    $tweet_list_parent = $( '<div/>' ).addClass( VICINITY_TWEET_LIST_PARENT_CLASS ).hide().attr( {
+                        'title' : OPTIONS.REFERECE_TO_RETWEET_CLOSE_BUTTON_TITLE,
+                    } );
+                }
+                
+                if ( $tweet_list_parent.is( ':hidden' ) ) {
+                    $user_cell_container.get( 0 ).scrollIntoView( false );
+                }
+                
+                $tweet_list_parent.off( 'click' ).on( 'click', ( event ) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    
+                    if ( $tweet_list_parent.is( ':hidden' ) ) {
+                        $tweet_list_parent.show();
+                        $base_container.css( {
+                            'max-height' : '300px',
+                        } );
+                    }
+                    else {
+                        $base_container.find( '.current' ).removeClass( 'current' );
+                        $tweet_list_parent.hide();
+                        $base_container.css( {
+                            'max-height' : 'unset',
+                        } );
+                    }
+                } );
+                
+                $tweet_list_parent.show();
+                $base_container.after( $tweet_list_parent );
+                
+                return $tweet_list_parent;
+            },
+            
+            set_tweet_list_event = () => {
+                var $retweeted_tweet = $tweet_list_container.find( '.target' ),
+                    $retweeted_tweet_body = $retweeted_tweet.find( '.tweet-body' );
+                
+                 $tweet_list_container.find( 'a' ).off( 'click' ).on( 'click', ( event ) => {
+                    event.stopPropagation();
+                } );
+                
+                $tweet_list_container.off( 'click' ).on( 'click', ( event ) => {
+                    event.stopPropagation();
+                } );
+                
+                $retweeted_tweet.children( '.tweet-info, .tweet-mark, .tweet-timestamp' ).off( 'click' ).on( 'click', ( event ) => {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    
+                    if ( $retweeted_tweet_body.is( ':hidden' ) ) {
+                        $retweeted_tweet_body.nextAll().addBack().show();
+                    }
+                    else {
+                        $retweeted_tweet_body.nextAll().addBack().hide();
+                    }
+                } );
+            },
+            
+            open_tweets = () => {
+                if ( is_loaded ) {
+                    onload();
+                    return;
+                }
+                
+                var retweeted_tweet_info,
+                    rt_info;
+                
+                try {
+                    retweeted_tweet_info = get_stored_tweet_info( retweeted_tweet_id );
+                    rt_info = retweeted_tweet_info.rt_info_map.screen_name_map[ act_screen_name ];
+                }
+                catch ( error ) {
+                    log_error( 'open_tweets() error', error );
+                    return;
+                }
+                
+                var $retweeted_tweet = create_tweet_container( retweeted_tweet_info, rt_info ).addClass( 'target' ).css( {
+                        'cursor' : 'pointer',
+                    } ),
+                    $retweeted_tweet_body = $retweeted_tweet.find( '.tweet-body' );
+                
+                $retweeted_tweet_body.nextAll().addBack().hide();
+                
+                $tweet_list_container = $( '<ul/>' )
+                    .addClass( VICINITY_TWEET_LIST_CLASS )
+                    .append( $retweeted_tweet )
+                    .hide();
+                
+                var timestamp_ms = rt_info.timestamp_ms,
+                    max_timestamp_ms = timestamp_ms + 1000 * 60 * get_max_after_retweet_minutes(),
+                    min_timestamp_ms = timestamp_ms - 1000 * 60 * get_max_before_retweet_minutes(),
+                    user_timeline = object_extender( TemplateUserTimeline ).init( {
+                        screen_name : act_screen_name,
+                        max_timestamp_ms : max_timestamp_ms,
+                    } ),
+                    
+                    recursive_call = () => {
+                        user_timeline.fetch_tweet_info()
+                        .then( ( tweet_info ) => {
+                            if ( ! tweet_info ) {
+                                onload();
+                                return;
+                            }
+                            
+                            if ( tweet_info.timestamp_ms < min_timestamp_ms ) {
+                                onload();
+                                return;
+                            }
+                            
+                            add_tweet_to_list( tweet_info, rt_info, $retweeted_tweet );
+                            
+                            recursive_call();
+                        } )
+                        .catch( ( error ) => {
+                            log_error( 'error:', error );
+                            alert( 'could not fetch tweets' );
+                            onerror();
+                        } );
+                    };
+                
+                recursive_call();
+                
+                $button_container.addClass( 'loading' );
+                $button.html( LOADING_ICON_SVG );
+                $button.attr( {
+                    'title' : OPTIONS.LOADING_TEXT,
+                    'data-status' : 'loading',
+                } );
+            },
+            
+            onload = () => {
+                var $tweet_list_parent = get_tweet_list_parent(),
+                    $base_container = $tweet_list_parent.prev();
+                
+                $base_container.find( '.current' ).removeClass( 'current' );
+                $button_container.addClass( 'current' );
+                
+                $tweet_list_container.children( 'li:first' ).addClass( 'first' );
+                $tweet_list_parent.empty().append( $tweet_list_container );
+                
+                set_tweet_list_event();
+                
+                is_loaded = true;
+                $tweet_list_container.show();
+                $button_container.removeClass( 'loading' );
+                $button.html( OPEN_ICON_SVG );
+                $button.attr( {
+                    'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
+                    'data-status' : 'close',
+                } );
+            },
+            
+            onerror = () => {
+                $tweet_list_container.hide();
+                $button_container.removeClass( 'loading' );
+                $button.html( OPEN_ICON_SVG );
+                $button.attr( {
+                    'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
+                    'data-status' : 'close',
+                } );
+            };
+        
+        $button.on( 'click', ( event ) => {
+            event.stopPropagation();
+            event.preventDefault();
+            
+            switch ( $button.attr( 'data-status' ) ) {
+                case 'close' :
+                    open_tweets();
+                    break;
+            }
+        } );
+        
+        return $button_container;
+    };
+} )(); // end of create_open_vicinity_tweets_button()
 
 
 function add_vicinity_link_to_tweet( $tweet ) {
@@ -2247,7 +2762,7 @@ function check_help_dialog() {
         $shortcut_key.empty();
         
         $shortcut_label.append( key_info.label );
-        $shortcut_key.append( key_info.key );
+        $shortcut_key.append( key_info.key.toUpperCase() );
         
         $shortcut_parent.append( $shortcut_container );
     } );
@@ -2315,7 +2830,7 @@ function check_user_timeline_end() {
             max_id = new Decimal( reacted_info.id ).sub( 1 ).toString(),
             screen_name = reacted_info.screen_name,
             query = 'from:' + screen_name + ' max_id:' + max_id + ' include:retweets include:nativeretweets',
-            search_url = 'https://twitter.com/search?src=typed_query&f=live&q=' + encodeURIComponent( query ),
+            search_url = '/search?src=typed_query&f=live&q=' + encodeURIComponent( query ),
             $container = $( 'header[role="banner"] nav[role="navigation"]:first' ).parents().eq( 1 );
         
         if ( $to_past_link.length <= 0 ) {
@@ -2391,20 +2906,24 @@ function check_timeline_tweets() {
             }
             
             var rt_info = reacted_tweet_info.rt_info_map.screen_name_map[ act_screen_name ],
+                tweet_url = location.href.replace( /\/retweets[\/]?[^\/]*$/, '' ),
                 $link_container,
-                $link;
+                $link,
+                $open_button_container,
+                $open_button;
             
             if ( ! rt_info ) {
                 return;
             }
             
+            
             $link_container = create_vicinity_link_container( {
-                tweet_url : location.href.replace( /\/retweets[\/]?[^\/]*$/, '' ),
+                tweet_url : tweet_url,
                 act_screen_name : act_screen_name,
                 attributes : {
                     'data-event_element' : 'user_retweeted_tweet',
                     'data-timestamp_ms' : 1 * rt_info.timestamp_ms,
-                }
+                },
             } );
             
             $link = $link_container.find( 'a:first' ).css( {
@@ -2421,8 +2940,27 @@ function check_timeline_tweets() {
                 'z-index' : 100,
             } );
             
+            $open_button_container = create_open_vicinity_tweets_button( {
+                tweet_url : tweet_url,
+                act_screen_name : act_screen_name,
+            } );
+            
+            $open_button = $open_button_container.find( 'a:first' ).css( {
+                'padding' : '2px 4px',
+                'background-color' : background_color,
+                'border-radius' : '12px',
+            } );
+            
+            $open_button_container.addClass( 'large' ).css( {
+                'position' : 'absolute',
+                'top' : '0',
+                'right' : '188px',
+                'z-index' : 100,
+            } );
+            
             //$user.find( 'a[role="link"]:has(span>span):first' ).parent().after( $link_container );
             $user.find( 'a[role="link"]' ).filter( function () {return ( 0 < $( this ).find( 'span>span' ).length );} ).first().parent().after( $link_container );
+            $link_container.before( $open_button_container );
         } );
     } )();
     
@@ -3422,7 +3960,10 @@ function start_key_observer() {
                 return search_and_click_button_on_stream_item( event, 'div.' + ACT_CONTAINER_CLASS + ' a' );
             
             case OPTIONS.TOGGLE_RERT_DIALOG_KEYCODE :
-                return search_and_click_button_on_stream_item( event, '.' + RECENT_RETWEETS_BUTTON_CLASS + ' button' );
+                return search_and_click_button_on_stream_item( event, [
+                    '.' + RECENT_RETWEETS_BUTTON_CLASS + ' button',
+                    '.' + OPEN_VICINITY_TWEETS_BUTTON_CONTAINER_CLASS + ' a',
+                ].join( ',' ) );
         }
     } );
 } // end of start_key_observer()
@@ -3580,7 +4121,7 @@ function start_fetch_observer() {
                 },
                 
                 [ url_filter_map, response_json_filter_map ] = ( () => {
-                    var api_user_timeline_template = '##API_USER_TIMELINE_TEMPLATE##',
+                    var api_user_timeline_template = '##API_USER_TIMELINE_TEMPLATE##' + '&user_id=#USER_ID#',
                         reg_api2_user_timeline_params = {
                             user_id : /\/profile\/(\d+)\.json/,
                             count : /[?&]count=(\d+)/,
@@ -4013,6 +4554,11 @@ function set_user_css() {
         vicinity_link_self_selector = vicinity_link_container_self_selector + ' > a.' + VICINITY_LINK_CLASS,
         vicinity_link_act_selector = vicinity_link_container_act_selector + ' > a.' + VICINITY_LINK_CLASS,
         recent_retweets_button_selector = 'div.' + RECENT_RETWEETS_BUTTON_CLASS + ' button.btn',
+        open_vicinity_tweets_button_container_selector = 'div.' + OPEN_VICINITY_TWEETS_BUTTON_CONTAINER_CLASS,
+        open_vicinity_tweets_button_selector = open_vicinity_tweets_button_container_selector + ' .' + OPEN_VICINITY_TWEETS_BUTTON_CLASS,
+        vicinity_tweet_list_parent_selector = 'div.' + VICINITY_TWEET_LIST_PARENT_CLASS,
+        vicinity_tweet_list_selector = 'ul.' + VICINITY_TWEET_LIST_CLASS,
+        vicinity_tweet_container_selector = 'li.' + VICINITY_TWEET_CONTAINER_CLASS,
         target_tweet_selector = 'div.' + TARGET_TWEET_CLASS + ' > article',
         vicinity_tweet_selector = 'div.' + VICINITY_TWEET_CLASS + ' > article',
         to_past_link_selector = 'a.' + TO_PAST_TIMELINE_CLASS,
@@ -4071,6 +4617,44 @@ function set_user_css() {
             recent_retweets_button_selector + ':hover {color: rgb(20, 23, 26); background-color: rgb(230, 236, 240); background-image: linear-gradient(rgb(255, 255, 255), rgb(230, 236, 240)); text-decoration: none; border-color: rgb(230, 236, 240);}',
             night_mode_selector + ' ' + recent_retweets_button_selector + ' {background-color: #182430; background-image: none; border: 1px solid #38444d; border-radius: 4px; color: #8899a6; display: inline-block;}',
             night_mode_selector + ' ' + recent_retweets_button_selector + ':hover {color: #fff; text-decoration: none; background-color: #10171e; background-image: none; border-color: #10171e;}',
+            
+            open_vicinity_tweets_button_container_selector + ' {display: inline-block;}',
+            open_vicinity_tweets_button_selector + ' {display: inline-block; color: ' + OPTIONS.LINK_ICON_COLOR + ';}',
+            open_vicinity_tweets_button_selector + ':hover {color: ' + OPTIONS.LINK_ICON_COLOR_HOVER + ';}',
+            night_mode_selector + ' ' + open_vicinity_tweets_button_selector + ' {color: ' + OPTIONS.LINK_ICON_COLOR_NIGHTMODE + ';}',
+            night_mode_selector + ' ' + open_vicinity_tweets_button_selector + ':hover {color: ' + OPTIONS.LINK_ICON_COLOR_HOVER_NIGHTMODE + ';}',
+            open_vicinity_tweets_button_selector  + ' svg {width: 100%; height: auto;}',
+            open_vicinity_tweets_button_container_selector + '.middle a {width: 18px; height: 18px;}',
+            open_vicinity_tweets_button_container_selector + '.large a {width: 24px; height: 24px;}',
+            open_vicinity_tweets_button_container_selector + '.loading a svg {animation: now_loading 2.0s linear infinite;}',
+            '@keyframes now_loading {0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);}}',
+            open_vicinity_tweets_button_container_selector + '.current a {color: #ff0000!important;}',
+            
+            vicinity_tweet_list_parent_selector + ' {max-width: 600px; height: 300px; overflow: auto; border-top: solid 1px #ccd6dd; padding: 8px 0; cursor: pointer;}',
+            vicinity_tweet_list_selector + ' {list-style-type: none; padding: 0 16px;}',
+            vicinity_tweet_container_selector + '{display: grid; grid-template-columns: 0px 1fr 40px 1fr; grid-template-areas:' + [ 
+               '"icon info  mark  timestamp"',
+               '"icon body  body  body     "',
+               '"icon media media media    "',
+            ].join( '\n' ) + ';}',
+            vicinity_tweet_container_selector + ' {color: #000000; background: #fcfcfc; padding: 4px 0; border: solid 1px #eeeeee; border-top: none;}',
+            vicinity_tweet_container_selector + '.first {border-top: solid 1px #eeeeee;}',
+            vicinity_tweet_container_selector + '.target {background: #eeeeee;}',
+            vicinity_tweet_container_selector + ' a {color: #1DA1F2; text-decoration: none;}',
+            vicinity_tweet_container_selector + ' a:hover {text-decoration: underline;}',
+            vicinity_tweet_container_selector + ' .user-icon {grid-area: icon;}',
+            vicinity_tweet_container_selector + ' .tweet-info {grid-area: info; font-size: 90%; text-align: left; margin-left: 8px;}',
+            vicinity_tweet_container_selector + ' .tweet-mark {grid-area: mark; font-size: 100%; text-align: center; color: #1DA1F2;}',
+            vicinity_tweet_container_selector + ' .tweet-timestamp {grid-area: timestamp; font-size: 90%; text-align: right; margin-right: 8px;}',
+            vicinity_tweet_container_selector + ' .tweet-body {grid-area: body; margin: 0 12px 0 4px; overflow: auto;}',
+            vicinity_tweet_container_selector + ' .tweet-media {grid-area: media; display: grid; grid-template-columns: 25% 25% 25% 25%;}',
+            vicinity_tweet_container_selector + ' .tweet-media a {display: inline-block; margin: 2px 4px;}',
+            vicinity_tweet_container_selector + ' .tweet-media a img {width: 100%; height: auto;}',
+            
+            night_mode_selector + ' ' + vicinity_tweet_list_parent_selector + ' {border-top: solid 1px #3d5466;}',
+            night_mode_selector + ' ' + vicinity_tweet_container_selector + ' {color: #ffffff; background: #1f1f1f; border: solid 1px #444444; border-top: none;}',
+            night_mode_selector + ' ' + vicinity_tweet_container_selector + '.first {border-top: solid 1px #444444;}',
+            night_mode_selector + ' ' + vicinity_tweet_container_selector + '.target {background: #444444;}',
             
             target_tweet_selector + ' {background-color: ' + OPTIONS.TARGET_TWEET_COLOR + ';}',
             vicinity_tweet_selector + ' {background-color: ' + OPTIONS.VICINITY_TWEET_COLOR + ';}',
