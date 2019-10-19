@@ -2303,8 +2303,10 @@ var create_open_vicinity_tweets_button = ( () => {
                         'href' : '/' + tweet_info.screen_name + '/status/' + tweet_info.id,
                     } ),
                     $rt_link,
-                    tweet_parts = tweet_info.tweet.full_text.split( '' ),
-                    tweet_entities = tweet_info.tweet.entities;
+                    //tweet_parts = tweet_info.tweet.full_text.split( '' ), // サロゲートペアを含む場合は NG
+                    tweet_parts = Array.from( tweet_info.tweet.full_text ),
+                    tweet_entities = tweet_info.tweet.entities,
+                    card_info = tweet_info.tweet.card || {};
                 
                 log_debug( 'create_tweet_container() tweet_info:', tweet_info, 'rt_info:', rt_info );
                 
@@ -2330,6 +2332,43 @@ var create_open_vicinity_tweets_button = ( () => {
                         for ( index = url_info.indices[ 0 ] + 1; index < url_info.indices[ 1 ]; index ++ ) {
                             tweet_parts[ index ] = '';
                         }
+                        
+                        if ( url_info.url != card_info.url ) {
+                            return;
+                        }
+                        
+                        var thumbnail_url = ( () => {
+                                try {
+                                    var thumnail_urls = [],
+                                        binding_values = card_info.binding_values,
+                                        image_values = Object.keys( binding_values ).reduce( ( image_values, key ) => {
+                                            var element = binding_values[ key ];
+                                            
+                                            if ( element.type == 'IMAGE' ) {
+                                                image_values.push( element.image_value );
+                                            }
+                                            return image_values;
+                                        }, [] ).sort( ( a, b ) => a.height - b.height );
+                                    
+                                    return ( image_values[ 0 ] || {} ).url;
+                                }
+                                catch ( error ) {
+                                    return null;
+                                }
+                            } )();
+                        
+                        if ( ! thumbnail_url ) {
+                            return;
+                        }
+                        
+                        var $link = $( '<a><img/></a>' ).attr( {
+                                'href' : url_info.expanded_url,
+                            } ),
+                            $image = $link.find( 'img:first' ).attr( {
+                                'src' : thumbnail_url,
+                            } );
+                        
+                        $tweet_media_container.append( $link );
                     } );
                     
                     ( tweet_entities.user_mentions || [] ).forEach( ( user_info ) => {
@@ -2357,7 +2396,6 @@ var create_open_vicinity_tweets_button = ( () => {
                             var index,
                                 is_image = ! /video/.test( media_info.media_url_https ),
                                 $link = $( '<a><img/></a>' ).attr( {
-                                    'target' : '_blank',
                                     'href' : ( is_image ) ? media_info.media_url_https.replace( /\.([^.]+)$/, '?format=$1&name=orig' ) : media_info.expanded_url,
                                 } ),
                                 $image = $link.find( 'img:first' ).attr( {
@@ -2490,10 +2528,13 @@ var create_open_vicinity_tweets_button = ( () => {
                 }
                 
                 var $retweeted_tweet = create_tweet_container( retweeted_tweet_info, rt_info ).addClass( 'target' ).css( {
-                        'cursor' : 'pointer',
+                        //'cursor' : 'pointer',
                     } ),
                     $retweeted_tweet_body = $retweeted_tweet.find( '.tweet-body' );
                 
+                $retweeted_tweet_body.prevAll().css( {
+                    'cursor' : 'pointer',
+                } );
                 $retweeted_tweet_body.nextAll().addBack().hide();
                 
                 $tweet_list_container = $( '<ul/>' )
@@ -4670,15 +4711,15 @@ function set_user_css() {
                '"icon info  mark  timestamp"',
                '"icon body  body  body     "',
                '"icon media media media    "',
-            ].join( '\n' ) + ';}',
+            ].join( '\n' ) + '; cursor: auto;}',
             vicinity_tweet_container_selector + ' {color: #000000; background: #fcfcfc; padding: 4px 0; border: solid 1px #eeeeee; border-top: none;}',
             vicinity_tweet_container_selector + '.first {border-top: solid 1px #eeeeee;}',
             vicinity_tweet_container_selector + '.target {background: #eeeeee;}',
-            vicinity_tweet_container_selector + ' a {color: #1DA1F2; text-decoration: none;}',
+            vicinity_tweet_container_selector + ' a {color: #1da1f2; text-decoration: none;}',
             vicinity_tweet_container_selector + ' a:hover {text-decoration: underline;}',
             vicinity_tweet_container_selector + ' .user-icon {grid-area: icon;}',
             vicinity_tweet_container_selector + ' .tweet-info {grid-area: info; font-size: 90%; text-align: left; margin-left: 8px;}',
-            vicinity_tweet_container_selector + ' .tweet-mark {grid-area: mark; font-size: 100%; text-align: center; color: #1DA1F2;}',
+            vicinity_tweet_container_selector + ' .tweet-mark {grid-area: mark; font-size: 100%; text-align: center; color: #1da1f2; user-select: none;}',
             vicinity_tweet_container_selector + ' .tweet-timestamp {grid-area: timestamp; font-size: 90%; text-align: right; margin-right: 8px;}',
             vicinity_tweet_container_selector + ' .tweet-body {grid-area: body; margin: 0 12px 0 4px; overflow: auto;}',
             vicinity_tweet_container_selector + ' .tweet-media {grid-area: media; display: grid; grid-template-columns: 25% 25% 25% 25%;}',

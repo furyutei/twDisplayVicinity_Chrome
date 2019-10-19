@@ -1217,6 +1217,7 @@ function set_user_css() {
             
             vicinity_link_container_selector + '.icon a {' + [
                 'color : ' + OPTIONS.LINK_ICON_COLOR + '!important',
+                'cursor : pointer',
             ].join( '; ' ) + ';}',
             
             vicinity_link_container_selector + '.icon a:hover {' + [
