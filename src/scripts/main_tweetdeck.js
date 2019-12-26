@@ -847,6 +847,8 @@ var add_vicinity_links_to_tweet = ( () => {
                     text = OPTIONS.LINK_TEXT;
                 }
                 
+                title += '\n' + '[Shift]+' + ( IS_MAC ? '[option]' : '[Alt]' ) +'+Click: Twilog';
+                
                 if ( class_name ) {
                     $link_container.addClass( class_name );
                 }
@@ -887,6 +889,40 @@ var add_vicinity_links_to_tweet = ( () => {
                         event_element = '',
                         search_parameters = {
                             use_user_timeline : ! ( OPTIONS.USE_SEARCH_TL_BY_DEFAULT ^ ( event.shiftKey || event.altKey || event.ctrlKey ) ),
+                        },
+                        
+                        finish = ( search_parameters ) => {
+                            var result_twilog = ( ( event ) => {
+                                    if ( ( ! event.altKey ) || ( ! event.shiftKey ) ) {
+                                        return false;
+                                    }
+                                    
+                                    var target_info = search_parameters.target_info,
+                                        target_screen_name = target_info.screen_name,
+                                        target_timestamp_ms = 1 * target_info.timestamp_ms;
+                                    
+                                    if ( ( ! target_screen_name ) || ( ! target_timestamp_ms ) ) {
+                                        return false;
+                                    }
+                                    
+                                    var target_date = new Date( target_timestamp_ms );
+                                    
+                                    if ( isNaN( target_date.getTime() ) ) {
+                                        return false;
+                                    }
+                                    
+                                    var twilog_url = 'https://twilog.org/' + target_screen_name + '/date-' + format_date( target_date, 'YYYYMMDD' ).slice( 2 );
+                                    
+                                    w.open( twilog_url, '_blank' );
+                                    
+                                    return true;
+                                } )( event );
+                            
+                            if ( result_twilog ) {
+                                return;
+                            }
+                            
+                            open_search_window( search_parameters );
                         };
                     
                     if ( reaction_info ) {
@@ -926,7 +962,7 @@ var add_vicinity_links_to_tweet = ( () => {
                             target_info : target_info,
                         } );
                         
-                        open_search_window( search_parameters );
+                        finish( search_parameters );
                         return;
                     }
                     
@@ -950,7 +986,7 @@ var add_vicinity_links_to_tweet = ( () => {
                     
                     log_debug( 'search_parameters:', search_parameters );
                     
-                    open_search_window( search_parameters );
+                    finish( search_parameters );
                 } );
                 
                 return $link_container;

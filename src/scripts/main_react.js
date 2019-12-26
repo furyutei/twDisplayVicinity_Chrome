@@ -107,7 +107,8 @@ var $ = jQuery,
     } )(),
     
     IS_FIREFOX = ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'firefox' ) ),
-    IS_EDGE = ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'edge' ) );
+    IS_EDGE = ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'edge' ) ),
+    IS_MAC = ( 0 <= w.navigator.platform.toLowerCase().indexOf( 'mac' ) );
 
 if ( IS_TOUCHED ) {
     console.error( SCRIPT_NAME + ': Already loaded.' );
@@ -891,7 +892,10 @@ var [
         fetch_json = ( url, options ) => {
             log_debug( 'fetch_json()', url, options );
             
-            if ( ( ! DOMAIN_PREFIX ) || ( IS_FIREFOX ) ) {
+            if (
+                //( ! DOMAIN_PREFIX ) ||
+                ( IS_FIREFOX ) 
+            ) {
                 return fetch( url, options ).then( ( response ) => response.json() );
             }
             
@@ -2093,6 +2097,8 @@ var create_vicinity_link_container = ( function () {
             text = OPTIONS.LINK_TEXT;
         }
         
+        title += '\n' + '[Shift]+' + ( IS_MAC ? '[option]' : '[Alt]' ) +'+Click: Twilog';
+        
         if ( class_name ) {
             $link_container.addClass( class_name );
         }
@@ -2123,6 +2129,35 @@ var create_vicinity_link_container = ( function () {
         $link.on( 'click', function ( event ) {
             event.stopPropagation();
             event.preventDefault();
+            
+            var result_twilog = ( ( event ) => {
+                    if ( ( ! event.altKey ) || ( ! event.shiftKey ) ) {
+                        return false;
+                    }
+                    
+                    var target_screen_name = $link.attr( 'data-act_screen_name' ) || $link.attr( 'data-self_screen_name' ),
+                        target_timestamp_ms = 1 * $link.attr( 'data-timestamp_ms' );
+                    
+                    if ( ( ! target_screen_name ) || ( ! target_timestamp_ms ) ) {
+                        return false;
+                    }
+                    
+                    var target_date = new Date( target_timestamp_ms );
+                    
+                    if ( isNaN( target_date.getTime() ) ) {
+                        return false;
+                    }
+                    
+                    var twilog_url = 'https://twilog.org/' + target_screen_name + '/date-' + format_date( target_date, 'YYYYMMDD' ).slice( 2 );
+                    
+                    w.open( twilog_url, '_blank' );
+                    
+                    return true;
+                } )( event );
+            
+            if ( result_twilog ) {
+                return;
+            }
             
             var act_screen_name = $link.attr( 'data-act_screen_name' ) || '',
                 event_element = $link.attr( 'data-event_element' ) || '',
