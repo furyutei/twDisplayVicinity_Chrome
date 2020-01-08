@@ -781,11 +781,22 @@ var parse_individual_tweet_url = ( () => {
 } )(); // end of parse_individual_tweet_url()
 
 
+function get_retweet_icon( $retweeter_link ) {
+    return $retweeter_link.parents().eq( 1 ).prev().find( 'svg:first' );
+} // end of get_retweeter_icon()
+
+
 function get_retweeter_link( $tweet ) {
     //return $tweet.find( 'a[role="link"]:not([href^="/i/"]):has(>span>span[dir="ltr"]>span)' ); // ←だと、自分自身がリツイートした場合に合致しない
     //return $tweet.find( 'a[role="link"]:not([href^="/i/"]):has(>span>span)' );
-    return $( $tweet.get( 0 ).querySelector( 'a[role="link"]:not([href^="/i/"])' ) ).filter( function () {
-        return ( 0 < $( this ).children('span').children('span').length );
+    return $( $tweet.get( 0 ).querySelector( 'a[role="link"][href^="/"]:not([href^="/i/"])' ) ).filter( function () {
+        var $link = $( this );
+        
+        if ( $link.children('span').children('span').length <= 0 ) {
+            return false;
+        }
+        
+        return ( 0 < get_retweet_icon( $link ).length );
     } );
 } // end of get_retweeter_link()
 
@@ -2820,15 +2831,18 @@ function add_vicinity_link_to_tweet( $tweet ) {
             } );
             
             //$retweeter_link.parents( 'div:has(>div>svg):first' ).find( 'div:has(>svg)' ).append( $link_container );
-            $retweeter_link.parents().each( function () {
-                var $svg = $( this ).find( 'svg' );
-                
-                if ( $svg.length <= 0 ) {
-                    return;
-                }
-                $svg.parent().append( $link_container );
-                return false;
-            } );
+            /*
+            //$retweeter_link.parents().each( function () {
+            //    var $svg = $( this ).find( 'svg' );
+            //    
+            //    if ( $svg.length <= 0 ) {
+            //        return;
+            //    }
+            //    $svg.parent().append( $link_container );
+            //    return false;
+            //} );
+            */
+            get_retweet_icon( $retweeter_link ).after( $link_container );
         }
     }
     

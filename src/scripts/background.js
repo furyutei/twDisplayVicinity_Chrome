@@ -6,7 +6,9 @@ w.chrome = ( ( typeof browser != 'undefined' ) && browser.runtime ) ? browser : 
 
 
 var DEBUG = false,
-    CONTENT_TAB_INFOS = {};
+    CONTENT_TAB_INFOS = {},
+    USERAGENT =  w.navigator.userAgent.toLowerCase(),
+    IS_FIREFOX = ( 0 <= USERAGENT.indexOf( 'firefox' ) );
 
 
 function log_debug() {
@@ -198,7 +200,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
         return ( ( requestHeaders !== undefined ) ? { requestHeaders : requestHeaders } : {} );
     },
     { urls : [ '*://*.twitter.com/*' ] },
-    [ 'blocking', 'requestHeaders', 'extraHeaders' ]
+    ( IS_FIREFOX ) ? [ 'blocking', 'requestHeaders',  ] : [ 'blocking', 'requestHeaders', 'extraHeaders' ],
+    // TODO: Firefox だと、extraHeaders を指定した際に↓のエラーとなる
+    // Error: Type error for parameter extraInfoSpec (Error processing 2: Invalid enumeration value "extraHeaders") for webRequest.onBeforeSendHeaders.
 );
 
 } )( window, document );

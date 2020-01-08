@@ -356,7 +356,10 @@ var fetch_api_json = ( () => {
         fetch_json = ( url, options ) => {
             log_debug( 'fetch_json()', url, options );
             
-            if ( ( ! DOMAIN_PREFIX ) || ( IS_FIREFOX ) ) {
+            if (
+                // ( ! DOMAIN_PREFIX ) ||
+                ( IS_FIREFOX ) 
+            ) {
                 return fetch( url, options ).then( response => response.json() );
             }
             

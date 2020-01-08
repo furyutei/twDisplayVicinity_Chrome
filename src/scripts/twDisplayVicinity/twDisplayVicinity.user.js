@@ -2,7 +2,7 @@
 // @name            twDisplayVicinity
 // @namespace       http://d.hatena.ne.jp/furyu-tei
 // @author          furyu
-// @version         0.2.6.13
+// @version         0.2.6.14
 // @include         https://twitter.com/*
 // @require         https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js
 // @require         https://cdnjs.cloudflare.com/ajax/libs/decimal.js/7.3.0/decimal.min.js
@@ -105,6 +105,10 @@ var OPTIONS = {
     HELP_OPEN_RERT_DIALOG_KEYCHAR : 'e', // [Re:RT]ダイアログを開くキー表示
     
     STATUSES_RETWEETS_CACHE_SEC : 0, // statuses/retweets API のキャッシュを保持する時間(秒)(0:保持しない)
+    
+    USE_APPLICATION_ONLY_AUTH : true, // true: Application-only authentication による OAuth2 token を用いて Twitter API をコール
+    // TODO: Application-only authentication を使用した場合、API 制限がかえって厳しくなる（アプリケーション全体での制限）
+    // false にすると、Firefox + GoodTwitter ではうまく動作しない（401 もしくは JSON でcode: 32 "Could not authenticate you." が返される）
     
     OPERATION : true // true: 動作中、false: 停止中
 };
@@ -238,6 +242,10 @@ var SEARCH_API = 'https://twitter.com/search',
     TIMELINE_API_BASE = 'https://twitter.com/',
     OAUTH2_TOKEN_API_URL = 'https://api.twitter.com/oauth2/token',
     ENCODED_TOKEN_CREDENTIAL = 'ZUMwYjVTcDdTTW0xaUtES3lwQ3AySkpkZDpsbHMxZ040Q0ZQMFhmSmtvbEk2UjBZMkd6aWxjbHhqQUlrZkVZSHl3Ymh6TjhZcURlSA==',
+    API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+    // TODO: 継続して使えるかどうか不明→変更された場合の対応を要検討
+    // ※ https://abs.twimg.com/responsive-web/web/main.<version>.js (例：https://abs.twimg.com/responsive-web/web/main.007c24006b6719434.js) 内で定義されている値
+    // ※ これを使用しても、一定時間内のリクエスト回数に制限有り→参考；[TwitterのAPI制限 [2019/05/31現在] - Qiita](https://qiita.com/mpyw/items/32d44a063389236c0a65)
     API_RATE_LIMIT_STATUS = 'https://api.twitter.com/1.1/application/rate_limit_status.json',
     API_STATUSES_RETWEETS_TEMPLATE = 'https://api.twitter.com/1.1/statuses/retweets/#TWEETID#.json?count=#NUMBER#',
     API_FAVORITES_LIST_TEMPLATE = 'https://api.twitter.com/1.1/favorites/list.json?screen_name=#SCREEN_NAME#&count=200&include_entities=true',
@@ -390,6 +398,13 @@ function log_debug() {
     
     console.log.apply( console, arg_list.concat( to_array( arguments ) ) );
 } // end of log_debug()
+
+
+function log_info() {
+    var arg_list = [ '[' + SCRIPT_NAME + ']', '(' + ( new Date().toISOString() ) + ')' ];
+    
+    console.info.apply( console, arg_list.concat( to_array( arguments ) ) );
+} // end of log_info()
 
 
 function log_error() {
@@ -892,6 +907,11 @@ function get_hide_threshold_tweet_id() {
     
     return Decimal.add( limit_tweet_id, 1 ).toString();
 } // end of get_hide_threshold_tweet_id()
+
+
+function is_api_ready() {
+    return  ( ! OPTIONS.USE_APPLICATION_ONLY_AUTH ) || ( !! OAUTH2_ACCESS_TOKEN );
+} // end of is_api_ready()
 
 
 var open_child_window = ( function () {
@@ -2129,7 +2149,50 @@ var recent_retweet_users_dialog = object_extender( {
             var self = this,
                 max_user_number = self.__get_max_user_number(),
                 limit_user_number = max_user_number + 10, // 数が少なく取れたり重複したりするケースもあるので、大目に指定
-                statuses_retweets_url = API_STATUSES_RETWEETS_TEMPLATE.replace( /#TWEETID#/g, retweeted_tweet_id ).replace( /#NUMBER#/g, '' + limit_user_number );
+                statuses_retweets_url = API_STATUSES_RETWEETS_TEMPLATE.replace( /#TWEETID#/g, retweeted_tweet_id ).replace( /#NUMBER#/g, '' + limit_user_number ),
+                api_get_csrf_token = () => {
+                    var csrf_token;
+                    
+                    try {
+                        csrf_token = document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ];
+                    }
+                    catch ( error ) {
+                    }
+                    
+                    return csrf_token;
+                }, // end of api_get_csrf_token()
+                
+                create_api_header = () => {
+                    if ( OPTIONS.USE_APPLICATION_ONLY_AUTH && OAUTH2_ACCESS_TOKEN ) {
+                        return {
+                            'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN,
+                        };
+                    }
+                    else {
+                        return {
+                            'authorization' : 'Bearer ' + API_AUTHORIZATION_BEARER,
+                            'x-csrf-token' : api_get_csrf_token(),
+                            'x-twitter-active-user' : 'yes',
+                            'x-twitter-auth-type' : 'OAuth2Session',
+                            'x-twitter-client-language' : LANGUAGE,
+                        };
+                    }
+                },
+                done = function ( retweet_user_info_list ) {
+                    if ( request_id != self.current_request_id ) {
+                        callback( request_id, 'ignore', retweet_user_info_list );
+                        return;
+                    }
+                    
+                    if ( 0 < OPTIONS.STATUSES_RETWEETS_CACHE_SEC ) {
+                        self.retweet_user_info_list_cache[ statuses_retweets_url ] = retweet_user_info_list;
+                        setTimeout( function () {
+                            delete self.retweet_user_info_list_cache[ statuses_retweets_url ];
+                        }, OPTIONS.STATUSES_RETWEETS_CACHE_SEC * 1000 );
+                    }
+                    
+                    callback( request_id, 'ok', retweet_user_info_list );
+                };
             
             if ( 0 < OPTIONS.STATUSES_RETWEETS_CACHE_SEC ) {
                 var retweet_user_info_list = self.retweet_user_info_list_cache[ statuses_retweets_url ];
@@ -2140,35 +2203,45 @@ var recent_retweet_users_dialog = object_extender( {
                 }
             }
             
-            $.ajax( {
-                type : 'GET',
-                url : statuses_retweets_url,
-                dataType : 'json',
-                headers : {
-                    'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN
-                }
-            } )
-            .done( function ( retweet_user_info_list ) {
-                if ( request_id != self.current_request_id ) {
-                    callback( request_id, 'ignore', retweet_user_info_list );
-                    return;
-                }
-                
-                if ( 0 < OPTIONS.STATUSES_RETWEETS_CACHE_SEC ) {
-                    self.retweet_user_info_list_cache[ statuses_retweets_url ] = retweet_user_info_list;
-                    setTimeout( function () {
-                        delete self.retweet_user_info_list_cache[ statuses_retweets_url ];
-                    }, OPTIONS.STATUSES_RETWEETS_CACHE_SEC * 1000 );
-                }
-                
-                callback( request_id, 'ok', retweet_user_info_list );
-            } )
-            .fail( function ( jqXHR, textStatus, errorThrown ) {
-                log_error( statuses_retweets_url, textStatus );
-                callback( request_id, 'load error: ' + textStatus, null );
-            } )
-            .always( function () {
-            } );
+            if ( ( ! IS_WEB_EXTENSION ) || IS_FIREFOX ) {
+                $.ajax( {
+                    type : 'GET',
+                    url : statuses_retweets_url,
+                    dataType : 'json',
+                    headers : create_api_header(),
+                } )
+                .done( done )
+                .fail( function ( jqXHR, textStatus, errorThrown ) {
+                    log_error( statuses_retweets_url, textStatus );
+                    callback( request_id, 'load error: ' + textStatus, null );
+                } )
+                .always( function () {
+                } );
+            }
+            else {
+                chrome.runtime.sendMessage( {
+                    type : 'FETCH_JSON',
+                    url : statuses_retweets_url,
+                    options : {
+                        method : 'GET',
+                        headers : create_api_header(),
+                        mode : 'cors',
+                        credentials : 'include',
+                    }
+                }, function ( response ) {
+                    log_debug( 'FETCH_JSON => response', response );
+                    
+                    if ( response.error ) {
+                        log_error( statuses_retweets_url, response.error );
+                        callback( request_id, 'load error: ' + response.error, null );
+                        return;
+                    }
+                    
+                    done( response.json );
+                    // TODO: シークレット(incognito)モードだと、{"errors":[{"code":353,"message":"This request requires a matching csrf cookie and header."}]} のように返されてしまう
+                    // → manifest.json に『"incognito" : "split"』が必要だが、煩雑になる(Firefoxでは manifest.json 読み込み時にエラーとなる)ため、保留
+                } );
+            }
             
             return self;
         }, // end of __load_recent_retweet_user_info()
@@ -3622,7 +3695,7 @@ function add_link_to_quote_tweet( jq_item ) {
         
         jq_user_name.after( jq_link_container );
         
-        if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && OAUTH2_ACCESS_TOKEN ) {
+        if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && is_api_ready() ) {
             if ( jq_quote_tweet.parents( [
                 'div[data-activity-type="retweet"]',
                 'div[data-activity-type="retweeted_mention"]',
@@ -3735,7 +3808,7 @@ function add_link_to_tweet( jq_tweet ) {
     
     add_link_to_quote_tweet( jq_tweet );
     
-    if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && OAUTH2_ACCESS_TOKEN ) {
+    if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && is_api_ready() ) {
         add_recent_retweeets_button_to_tweet( jq_tweet );
     }
 } // end of add_link_to_tweet()
@@ -4062,7 +4135,7 @@ function check_changed_node( target_node ) {
         add_link_to_activity( jq_activity );
     } );
     
-    if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && OAUTH2_ACCESS_TOKEN ) {
+    if ( OPTIONS.ENABLE_RECENT_RETWEET_USERS_BUTTON && is_api_ready() ) {
         ( ( jq_target.hasClasses( SELECTOR_INFO.action_to_tweet_class_names, true ) ) ? jq_target : jq_target.find( SELECTOR_INFO.action_to_tweet_selector ) )
         .each( function () {
             var jq_action_to_tweet = $( this );
@@ -4365,72 +4438,142 @@ function initialize( user_options ) {
         OAUTH2_ACCESS_TOKEN = null;
         set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', '' );
         
-        $.ajax( {
-            type : 'POST',
-            url : OAUTH2_TOKEN_API_URL,
-            headers : {
-                'Authorization' : 'Basic '+ ENCODED_TOKEN_CREDENTIAL,
-                'Content-Type' : 'application/x-www-form-urlencoded;charset=UTF-8'
-            },
-            data : {
-                'grant_type' : 'client_credentials'
-            },
-            dataType : 'json',
-            xhrFields : {
-                withCredentials : false // Cross-Origin Resource Sharing(CORS)用設定
-                // TODO: Chrome 拡張機能だと false であっても Cookie が送信されてしまう
-                // → webRequest を有効にして、background.js でリクエストヘッダから Cookie を取り除くようにして対応
-                // → webRequest を無効にしていても、Cookie が送信されなくなったので、元に戻す
-                // → 0.2.6.7: 状況によっては Cookie が送出されるようなので、webRequest 有効化
-                //   ※ Cookie 内に auth_token が含まれていると、403 (code:99)が返る模様
-            }
-        } )
-        .done( function ( json ) {
-            OAUTH2_ACCESS_TOKEN = json.access_token;
-            if ( OPTIONS.CACHE_OAUTH2_ACCESS_TOKEN ) {
-                set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', OAUTH2_ACCESS_TOKEN );
-            }
-        } )
-        .fail( function ( jqXHR, textStatus, errorThrown ) {
-            log_error( OAUTH2_TOKEN_API_URL, textStatus );
-            // TODO: Cookies 中に auth_token が含まれていると、403 (code:99)が返ってきてしまう
-            // → auth_token は Twitter ログイン中保持されるため、Cookies を送らないようにする対策が取れない場合、対応は困難
-            OAUTH2_ACCESS_TOKEN = null;
-            set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', '' );
-        } )
-        .always( function () {
-            start_main();
-        } );
+        if ( ( ! IS_WEB_EXTENSION ) || IS_FIREFOX ) {
+            $.ajax( {
+                type : 'POST',
+                url : OAUTH2_TOKEN_API_URL,
+                headers : {
+                    'Authorization' : 'Basic '+ ENCODED_TOKEN_CREDENTIAL,
+                    'Content-Type' : 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                data : {
+                    'grant_type' : 'client_credentials'
+                },
+                dataType : 'json',
+                xhrFields : {
+                    withCredentials : false // Cross-Origin Resource Sharing(CORS)用設定
+                    // TODO: Chrome 拡張機能だと false であっても Cookie が送信されてしまう
+                    // → webRequest を有効にして、background.js でリクエストヘッダから Cookie を取り除くようにして対応
+                    // → webRequest を無効にしていても、Cookie が送信されなくなったので、元に戻す
+                    // → 0.2.6.7: 状況によっては Cookie が送出されるようなので、webRequest 有効化
+                    //   ※ Cookie 内に auth_token が含まれていると、403 (code:99)が返る模様
+                }
+            } )
+            .done( function ( json ) {
+                OAUTH2_ACCESS_TOKEN = json.access_token;
+                if ( OPTIONS.CACHE_OAUTH2_ACCESS_TOKEN ) {
+                    set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', OAUTH2_ACCESS_TOKEN );
+                }
+            } )
+            .fail( function ( jqXHR, textStatus, errorThrown ) {
+                log_error( OAUTH2_TOKEN_API_URL, textStatus );
+                // TODO: Cookies 中に auth_token が含まれていると、403 (code:99)が返ってきてしまう
+                // → auth_token は Twitter ログイン中保持されるため、Cookies を送らないようにする対策が取れない場合、対応は困難
+                OAUTH2_ACCESS_TOKEN = null;
+                set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', '' );
+            } )
+            .always( function () {
+                start_main();
+            } );
+        }
+        else {
+            chrome.runtime.sendMessage( {
+                type : 'FETCH_JSON',
+                url : OAUTH2_TOKEN_API_URL,
+                options : {
+                    method : 'POST',
+                    headers : {
+                        'Authorization' : 'Basic '+ ENCODED_TOKEN_CREDENTIAL,
+                        'Content-Type' : 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    mode : 'cors',
+                    credentials : 'include',
+                    body : 'grant_type=client_credentials'
+                }
+            }, function ( response ) {
+                log_debug( 'FETCH_JSON => response', response );
+                
+                if ( response.error ) {
+                    log_debug( OAUTH2_TOKEN_API_URL, response.error );
+                    OAUTH2_ACCESS_TOKEN = null;
+                    set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', '' );
+                }
+                else {
+                    OAUTH2_ACCESS_TOKEN = response.json.access_token;
+                    if ( OPTIONS.CACHE_OAUTH2_ACCESS_TOKEN ) {
+                        set_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN', OAUTH2_ACCESS_TOKEN );
+                    }
+                }
+                start_main();
+            } );
+        }
     } // end of get_access_token()
     
+    if ( ! OPTIONS.USE_APPLICATION_ONLY_AUTH ) {
+        OAUTH2_ACCESS_TOKEN = null;
+        start_main();
+        return;
+    }
     
     OAUTH2_ACCESS_TOKEN = ( OPTIONS.CACHE_OAUTH2_ACCESS_TOKEN ) ? get_value( SCRIPT_NAME + '_OAUTH2_ACCESS_TOKEN' ) : null;
     
     if ( OAUTH2_ACCESS_TOKEN ) {
-        $.ajax( {
-            type : 'GET',
-            url : API_RATE_LIMIT_STATUS,
-            data : {
-                'resources' : 'statuses'
-            },
-            dataType : 'json',
-            headers : {
-                'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN
-            }
-        } )
-        .done( function ( json ) {
-            if ( ( ! json ) || ( ! json.rate_limit_context ) || ( ! json.resources ) || ( ! json.resources.statuses ) ) {
+        if ( ( ! IS_WEB_EXTENSION ) || IS_FIREFOX ) {
+            $.ajax( {
+                type : 'GET',
+                url : API_RATE_LIMIT_STATUS,
+                data : {
+                    'resources' : 'statuses'
+                },
+                dataType : 'json',
+                headers : {
+                    'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN
+                }
+            } )
+            .done( function ( json ) {
+                if ( ( ! json ) || ( ! json.rate_limit_context ) || ( ! json.resources ) || ( ! json.resources.statuses ) ) {
+                    get_access_token();
+                    return;
+                }
+                start_main();
+            } )
+            .fail( function ( jqXHR, textStatus, errorThrown ) {
+                log_debug( API_RATE_LIMIT_STATUS, textStatus );
                 get_access_token();
-                return;
-            }
-            start_main();
-        } )
-        .fail( function ( jqXHR, textStatus, errorThrown ) {
-            log_debug( API_RATE_LIMIT_STATUS, textStatus );
-            get_access_token();
-        } )
-        .always( function () {
-        } );
+            } )
+            .always( function () {
+            } );
+        }
+        else {
+            chrome.runtime.sendMessage( {
+                type : 'FETCH_JSON',
+                url : API_RATE_LIMIT_STATUS + '?resources=statuses',
+                options : {
+                    method : 'GET',
+                    headers : {
+                        'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN
+                    },
+                    mode : 'cors',
+                    credentials : 'include',
+                }
+            }, function ( response ) {
+                log_debug( 'FETCH_JSON => response', response );
+                
+                if ( response.error ) {
+                    log_debug( API_RATE_LIMIT_STATUS, response.error );
+                    get_access_token();
+                    return;
+                }
+                
+                var json = response.json;
+                
+                if ( ( ! json ) || ( ! json.rate_limit_context ) || ( ! json.resources ) || ( ! json.resources.statuses ) ) {
+                    get_access_token();
+                    return;
+                }
+                start_main();
+            } );
+        }
     }
     else {
         get_access_token();
