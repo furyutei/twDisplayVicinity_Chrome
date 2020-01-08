@@ -2,7 +2,7 @@
 // @name            twDisplayVicinity
 // @namespace       http://d.hatena.ne.jp/furyu-tei
 // @author          furyu
-// @version         0.2.6.14
+// @version         0.2.6.15
 // @include         https://twitter.com/*
 // @require         https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js
 // @require         https://cdnjs.cloudflare.com/ajax/libs/decimal.js/7.3.0/decimal.min.js
@@ -106,9 +106,12 @@ var OPTIONS = {
     
     STATUSES_RETWEETS_CACHE_SEC : 0, // statuses/retweets API のキャッシュを保持する時間(秒)(0:保持しない)
     
-    USE_APPLICATION_ONLY_AUTH : true, // true: Application-only authentication による OAuth2 token を用いて Twitter API をコール
+    USE_APPLICATION_ONLY_AUTH : false, // true: Application-only authentication による OAuth2 token を用いて Twitter API をコール
     // TODO: Application-only authentication を使用した場合、API 制限がかえって厳しくなる（アプリケーション全体での制限）
-    // false にすると、Firefox + GoodTwitter ではうまく動作しない（401 もしくは JSON でcode: 32 "Could not authenticate you." が返される）
+    // TODO: false にすると、Firefox + GoodTwitter ではうまく動作しない（401 もしくは JSON でcode: 32 "Could not authenticate you." が返される）
+    // → $.ajax の withCredentials が false だとこうなる模様・true になるよう修正
+    // TODO: GoodTwitterを入れるとUAからはブラウザ種別が判別できない（UAが固定になるため）
+    // → Firefox(拡張機能)は browser 変数の定義による判別
     
     OPERATION : true // true: 動作中、false: 停止中
 };
@@ -177,7 +180,9 @@ var $ = jQuery,
     } )(),
     
     IS_WEB_EXTENSION = !! ( w.is_web_extension ),
-    IS_FIREFOX = ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'firefox' ) ),
+    IS_FIREFOX = ( typeof browser != 'undefined' ) || ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'firefox' ) ),
+        // TODO: GoodTwitter等を併用していると、User-Agent では判別できなくなる（"Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) Waterfox/56.2"のようになる）
+        // → browser が定義されているかで判別
     IS_EDGE = ( 0 <= w.navigator.userAgent.toLowerCase().indexOf( 'edge' ) );
 
 //} end of check environment
@@ -2150,7 +2155,7 @@ var recent_retweet_users_dialog = object_extender( {
                 max_user_number = self.__get_max_user_number(),
                 limit_user_number = max_user_number + 10, // 数が少なく取れたり重複したりするケースもあるので、大目に指定
                 statuses_retweets_url = API_STATUSES_RETWEETS_TEMPLATE.replace( /#TWEETID#/g, retweeted_tweet_id ).replace( /#NUMBER#/g, '' + limit_user_number ),
-                api_get_csrf_token = () => {
+                api_get_csrf_token = function () {
                     var csrf_token;
                     
                     try {
@@ -2162,7 +2167,7 @@ var recent_retweet_users_dialog = object_extender( {
                     return csrf_token;
                 }, // end of api_get_csrf_token()
                 
-                create_api_header = () => {
+                create_api_header = function () {
                     if ( OPTIONS.USE_APPLICATION_ONLY_AUTH && OAUTH2_ACCESS_TOKEN ) {
                         return {
                             'Authorization' : 'Bearer ' + OAUTH2_ACCESS_TOKEN,
@@ -2209,6 +2214,9 @@ var recent_retweet_users_dialog = object_extender( {
                     url : statuses_retweets_url,
                     dataType : 'json',
                     headers : create_api_header(),
+                    xhrFields : {
+                        withCredentials : true // Cross-Origin Resource Sharing(CORS)用設定
+                    }
                 } )
                 .done( done )
                 .fail( function ( jqXHR, textStatus, errorThrown ) {
