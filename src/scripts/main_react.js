@@ -250,6 +250,8 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
         status : 'idle', // 'idle', 'wait_dialog', 'dialog_displayed'
         tweet_id : null,
         url_to_return : null,
+        first_user_focused : false,
+        load_button_is_locked : false,
     },
     
     /*
@@ -2288,7 +2290,7 @@ var create_open_vicinity_tweets_button = ( () => {
     var $button_container_template = $( '<div><a></a></div>' ).addClass( OPEN_VICINITY_TWEETS_BUTTON_CONTAINER_CLASS ),
         $button_template = $button_container_template.find( 'a:first' ).addClass( OPEN_VICINITY_TWEETS_BUTTON_CLASS ).html( OPEN_ICON_SVG ).attr( {
             'title' : OPTIONS.REFERECE_TO_RETWEET_LOAD_BUTTON_TITLE,
-            'data-status' : 'close',
+            'data-status' : 'closed',
         } ),
         
         get_max_after_retweet_minutes = () => {
@@ -2496,7 +2498,6 @@ var create_open_vicinity_tweets_button = ( () => {
                     $retweeted_tweet.before( $tweet );
                 }
                 else {
-                    
                     $tweet_list_container.append( $tweet );
                 }
             },
@@ -2536,6 +2537,10 @@ var create_open_vicinity_tweets_button = ( () => {
                     }
                     else {
                         $base_container.find( '.current' ).removeClass( 'current' );
+                        $base_container.find( '.' + OPEN_VICINITY_TWEETS_BUTTON_CLASS ).html( OPEN_ICON_SVG ).attr( {
+                            'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
+                            'data-status' : 'closed',
+                        } );
                         $tweet_list_parent.hide();
                         $base_container.removeClass( VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS );
                     }
@@ -2619,12 +2624,12 @@ var create_open_vicinity_tweets_button = ( () => {
                         user_timeline.fetch_tweet_info()
                         .then( ( tweet_info ) => {
                             if ( ! tweet_info ) {
-                                onload();
+                                onload( true );
                                 return;
                             }
                             
                             if ( tweet_info.timestamp_ms < min_timestamp_ms ) {
-                                onload();
+                                onload( true );
                                 return;
                             }
                             
@@ -2649,46 +2654,84 @@ var create_open_vicinity_tweets_button = ( () => {
                 } );
             },
             
-            onload = () => {
+            close_tweets = () => {
+                var $region = $button_container.parents( 'section[role="region"]:first' ),
+                    $base_container = $region.parents().eq( 2 ).addClass( VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS ),
+                    $tweet_list_parent = $base_container.nextAll( '.' + VICINITY_TWEET_LIST_PARENT_CLASS );
+                
+                $tweet_list_parent.click();
+                
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
+            },
+            
+            onload = ( is_first_time ) => {
                 var $tweet_list_parent = get_tweet_list_parent(),
                     $base_container = $tweet_list_parent.prev();
                 
+                $button_container.removeClass( 'loading' );
                 $base_container.find( '.current' ).removeClass( 'current' );
+                $base_container.find( '.' + OPEN_VICINITY_TWEETS_BUTTON_CLASS ).html( OPEN_ICON_SVG ).attr( {
+                    'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
+                    'data-status' : 'closed',
+                } );
+                //$base_container.find( 'div[data-testid="UserCell"]' ).attr( 'data-focusvisible-polyfill', '' );
+                
                 $button_container.addClass( 'current' );
+                $button.attr( {
+                    'title' : OPTIONS.REFERECE_TO_RETWEET_CLOSE_BUTTON_TITLE,
+                    'data-status' : 'opened',
+                } ).html( CLOSE_ICON_SVG );
+                //$button.parents( 'div[data-testid="UserCell"]:first' ).attr( 'data-focusvisible-polyfill', true );
+                // TODO: 前後ツイートを開いた際に自動的にフォーカスしたかったが、うまくいかないため保留
                 
                 $tweet_list_container.children( 'li:first' ).addClass( 'first' );
                 $tweet_list_parent.empty().append( $tweet_list_container );
-                
                 set_tweet_list_event();
-                
-                is_loaded = true;
                 $tweet_list_container.show();
-                $button_container.removeClass( 'loading' );
-                $button.html( OPEN_ICON_SVG );
-                $button.attr( {
-                    'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
-                    'data-status' : 'close',
-                } );
+                
+                if ( is_first_time ) {
+                    setTimeout( () => {
+                        $tweet_list_container.find( '.target' ).get( 0 ).scrollIntoView( false );
+                    }, 1 );
+                }
+                is_loaded = true;
+                
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
             },
             
             onerror = () => {
                 $tweet_list_container.hide();
                 $button_container.removeClass( 'loading' );
-                $button.html( OPEN_ICON_SVG );
-                $button.attr( {
+                $button.html( OPEN_ICON_SVG ).attr( {
                     'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
-                    'data-status' : 'close',
+                    'data-status' : 'closed',
                 } );
+                
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
             };
         
         $button.on( 'click', ( event ) => {
             event.stopPropagation();
             event.preventDefault();
             
+            if ( CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked ) {
+                return;
+            }
+            
+            CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = true;
+
             switch ( $button.attr( 'data-status' ) ) {
-                case 'close' :
+                case 'closed' :
                     open_tweets();
                     break;
+                
+                case 'opened' :
+                    close_tweets();
+                    break;
+                
+                default :
+                    CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
+                    return;
             }
         } );
         
@@ -3048,6 +3091,18 @@ function check_timeline_tweets() {
                 return;
             }
             
+            if ( ! CURRENT_REFERENCE_TO_RETWEETERS_INFO.first_user_focused ) {
+                /*
+                //setTimeout( () => {
+                //    var key_event = new KeyboardEvent( 'keypress', { keyCode : 106 } ); // [j]
+                //    
+                //    d.dispatchEvent( key_event );
+                //}, 1 );
+                // TODO: RTユーザー一覧表示時に先頭ユーザーにフォーカスしたかったが、うまく動作しないため保留
+                */
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.first_user_focused = true;
+            }
+            
             var rt_info = reacted_tweet_info.rt_info_map.screen_name_map[ act_screen_name ],
                 tweet_url = location.href.replace( /\/retweets[\/]?[^\/]*$/, '' ),
                 $link_container,
@@ -3137,6 +3192,8 @@ function check_timeline_tweets() {
         case 'wait_dialog' :
             if ( 0 <= location.href.indexOf( '/' + CURRENT_REFERENCE_TO_RETWEETERS_INFO.tweet_id + '/retweets' ) ) {
                 CURRENT_REFERENCE_TO_RETWEETERS_INFO.status = 'dialog_displayed';
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.first_user_focused = false;
+                CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
             }
             break;
         
@@ -4113,6 +4170,39 @@ function start_key_observer() {
                 ].join( ',' ) );
         }
     } );
+    
+    var move_timer_id = null;
+    
+    $( d ).on( 'keypress.main', function ( event ) {
+        if ( ! is_tweet_retweeters_url() ) {
+            return;
+        }
+        
+        var $tweet_list_parent = $( '.' + VICINITY_TWEET_LIST_PARENT_CLASS );
+        
+        if ( ( $tweet_list_parent.length <= 0 ) || $tweet_list_parent.is( ':hidden' ) ) {
+            return;
+        }
+        
+        var key_code = event.keyCode;
+        
+        switch ( key_code ) {
+            case 106 : // [j]
+            case 107 : // [k]
+                if ( move_timer_id ) {
+                    clearTimeout( move_timer_id );
+                    move_timer_id = null;
+                }
+                
+                move_timer_id  = setTimeout( () => {
+                    var key_event = new KeyboardEvent( 'keydown', { keyCode : OPTIONS.TOGGLE_RERT_DIALOG_KEYCODE } );
+                    
+                    d.body.dispatchEvent( key_event );
+                }, 1 );
+                break;
+        }
+    } );
+    
 } // end of start_key_observer()
 
 
