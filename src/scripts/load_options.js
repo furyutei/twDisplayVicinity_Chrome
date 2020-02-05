@@ -12,6 +12,7 @@ if ( chrome.runtime.lastError ) {
 // 外部スクリプトを content_scripts 内に挿入
 inject_script_all( [
     'scripts/intercept_xhr.js',
+    'scripts/fetch_wrapper.js',
     'scripts/decimal.min.js',
     'scripts/jquery.min.js',
 ] );
@@ -62,28 +63,24 @@ function get_text( value ) {
 
 
 function get_init_function( message_type, option_name_to_function_map, namespace ) {
-    var option_names = [];
+    var option_names = Object.keys( option_name_to_function_map );
     
-    for ( var option_name in option_name_to_function_map ) {
-        if ( option_name_to_function_map.hasOwnProperty( option_name ) ) {
-            option_names.push( option_name );
-        }
-    }
     
     function analyze_response( response ) {
-        var options = {};
-        
         if ( ! response ) {
             response = {};
         }
         
-        for ( var option_name in option_name_to_function_map ) {
-            if ( ! ( response.hasOwnProperty( option_name ) ) ) {
-                options[ option_name ] = null;
-                continue;
-            }
-            options[ option_name ] =  option_name_to_function_map[ option_name ]( response[ option_name ] );
-        }
+        var options = option_names.reduce( ( options, option_name ) => {
+                if ( Object.prototype.hasOwnProperty.call( response, option_name ) ) {
+                    options[ option_name ] = option_name_to_function_map[ option_name ]( response[ option_name ] );
+                }
+                else {
+                    options[ option_name ] = null;
+                }
+                return options;
+            }, {} );
+        
         return options;
     }
     
@@ -97,7 +94,8 @@ function get_init_function( message_type, option_name_to_function_map, namespace
             var options = analyze_response( response );
             
             // 外部スクリプトの挿入完了を待つ
-            external_script_injection_ready( ( injected_scripts ) => {
+            external_script_injection_ready()
+            .then( ( injected_scripts ) => {
                 callback( options );
             } );
         } );

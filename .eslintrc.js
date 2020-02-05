@@ -18,7 +18,9 @@ module.exports = {
         "GM_setValue": "readonly",
         "GM_getValue": "readonly",
         "intercept_xhr_response": "readonly",
+        "inject_script": "readonly",
         "inject_script_all": "readonly",
+        "inject_code": "readonly",
         "external_script_injection_ready": "readonly",
     },
     "parserOptions": {
