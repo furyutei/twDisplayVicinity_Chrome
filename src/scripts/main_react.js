@@ -1259,10 +1259,22 @@ var [
                     }
                     
                     var notification_info = notification_info_map[ notification_id ] = notification_info_map[ notification_id ] || {},
-                        event_title = content.notification.url.urtEndpointOptions.title,
-                        timestamp_ms = 1 * notification.timestampMs, // 1 * entry.sortIndex と同じ
-                        targetObjects = notification.template.aggregateUserActionsV1.targetObjects,
+                        event_title,
+                        timestamp_ms,
+                        targetObjects,
+                        fromUsers;
+                    
+                    try {
+                        event_title = content.notification.url.urtEndpointOptions.title;
+                        timestamp_ms = 1 * notification.timestampMs; // 1 * entry.sortIndex と同じ
+                        targetObjects = notification.template.aggregateUserActionsV1.targetObjects;
                         fromUsers = notification.template.aggregateUserActionsV1.fromUsers;
+                    }
+                    catch ( error ) {
+                        // TODO: event_title が取れない場合あり？
+                        log_error( 'content error:', error, content );
+                        return;
+                    }
                     
                     event_title_info_map[ event_element ] = {
                         event_element : event_element,
@@ -2143,6 +2155,8 @@ var create_vicinity_link_container = ( function () {
             event.stopPropagation();
             event.preventDefault();
             
+            //$link.parents( '[data-focusable="true"]' ).first().focus();
+            
             var result_twilog = ( ( event ) => {
                     if ( ( ! event.altKey ) || ( ! event.shiftKey ) ) {
                         return false;
@@ -2256,6 +2270,8 @@ var create_recent_retweet_users_button = ( () => {
         $recent_retweet_users_button.on( 'click', function ( event ) {
             event.stopPropagation();
             event.preventDefault();
+            
+            //$recent_retweet_users_button.parents( '[data-focusable="true"]' ).first().focus();
             
             var $ancestor = $recent_retweet_users_button_container.parents( 'article[role="article"]:first' );
             
@@ -2508,7 +2524,8 @@ var create_open_vicinity_tweets_button = ( () => {
                     $scroll_base = $base_container.children().first(),
                     $tweet_list_parent = $base_container.nextAll( '.' + VICINITY_TWEET_LIST_PARENT_CLASS ),
                     $user_cell_container = $button_container.parents( 'div[data-testid="UserCell"]:first' ),
-                    $user_container = $user_cell_container.parents().eq( 1 );
+                    $user_container = $user_cell_container.parents().eq( 1 ),
+                    $scroll_area;
                 
                 if ( $tweet_list_parent.length <= 0 ) {
                     $tweet_list_parent = $( '<div/>' ).addClass( VICINITY_TWEET_LIST_PARENT_CLASS ).hide().attr( {
@@ -2516,6 +2533,7 @@ var create_open_vicinity_tweets_button = ( () => {
                     } );
                 }
                 
+                /*
                 if ( $tweet_list_parent.is( ':hidden' ) ) {
                     if ( 0 < $user_container.parents( 'main[role="main"]' ).length ) {
                         // 画面幅が一定より狭い場合には全画面→スクロールは window 基準
@@ -2523,8 +2541,17 @@ var create_open_vicinity_tweets_button = ( () => {
                     }
                     else {
                         // 画面幅が一定より広い場合にはポップアップ→スクロールは親要素基準
-                        $user_container.get( 0 ).scrollIntoView( false );
+                        //$user_container.get( 0 ).scrollIntoView( false );
                     }
+                }
+                */
+                if ( 0 < $user_container.parents( 'main[role="main"]' ).length ) {
+                    // 画面幅が一定より狭い場合には全画面→スクロールは window 基準
+                    $( w ).scrollTop( $user_container.offset().top - 73 );
+                }
+                else {
+                    $scroll_area = $user_container.parents( 'section[role="region"]:first' ).parents().eq( 1 );
+                    $scroll_area.scrollTop( $scroll_area.scrollTop() + $user_container.offset().top - $scroll_area.offset().top - 24 );
                 }
                 
                 $tweet_list_parent.off( 'click' ).on( 'click', ( event ) => {
@@ -2674,26 +2701,26 @@ var create_open_vicinity_tweets_button = ( () => {
                     'title' : OPTIONS.REFERECE_TO_RETWEET_OPEN_BUTTON_TITLE,
                     'data-status' : 'closed',
                 } );
-                //$base_container.find( 'div[data-testid="UserCell"]' ).attr( 'data-focusvisible-polyfill', '' );
                 
                 $button_container.addClass( 'current' );
                 $button.attr( {
                     'title' : OPTIONS.REFERECE_TO_RETWEET_CLOSE_BUTTON_TITLE,
                     'data-status' : 'opened',
                 } ).html( CLOSE_ICON_SVG );
-                //$button.parents( 'div[data-testid="UserCell"]:first' ).attr( 'data-focusvisible-polyfill', true );
-                // TODO: 前後ツイートを開いた際に自動的にフォーカスしたかったが、うまくいかないため保留
                 
                 $tweet_list_container.children( 'li:first' ).addClass( 'first' );
                 $tweet_list_parent.empty().append( $tweet_list_container );
                 set_tweet_list_event();
                 $tweet_list_container.show();
                 
-                if ( is_first_time ) {
-                    setTimeout( () => {
-                        $tweet_list_container.find( '.target' ).get( 0 ).scrollIntoView( false );
-                    }, 1 );
-                }
+                setTimeout( () => {
+                    // 元ツイートが見える位置までスクロール
+                    //$tweet_list_container.find( '.target' ).get( 0 ).scrollIntoView( false ); // TODO: うまくいかないケースあり
+                    var adjusted_top = $tweet_list_parent.scrollTop() + $tweet_list_container.find( '.target' ).offset().top - $tweet_list_parent.offset().top - $tweet_list_parent.height() * 2 / 3;
+                    
+                    $tweet_list_parent.scrollTop( adjusted_top );
+                }, 1 );
+                
                 is_loaded = true;
                 
                 CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
@@ -2714,12 +2741,15 @@ var create_open_vicinity_tweets_button = ( () => {
             event.stopPropagation();
             event.preventDefault();
             
+            //$button_container.parents( 'div[data-testid="UserCell"]:first' ).focus();
+            $button_container.parents( '[data-focusable="true"]' ).first().focus();
+            
             if ( CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked ) {
                 return;
             }
             
             CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = true;
-
+            
             switch ( $button.attr( 'data-status' ) ) {
                 case 'closed' :
                     open_tweets();
@@ -4105,20 +4135,31 @@ function start_key_observer() {
             return true;
         }, // end of is_key_acceptable()
         
+        get_current_retweeter = () => {
+            var $region = $( '[aria-labelledby="modal-header"], main[role="main"]' ).find( 'section[role="region"]' ),
+                $current_retweeter = $region.find( 'div[data-testid="UserCell"][data-focusvisible-polyfill="true"]' );
+            
+            return $current_retweeter;
+        },
+        
+        get_first_retweeter = () => {
+            var $region = $( '[aria-labelledby="modal-header"], main[role="main"]' ).find( 'section[role="region"]' ),
+                $first_retweeter = $region.find( 'div[data-testid="UserCell"]' ).filter( function () {
+                    return ( 0 < $( this ).find( 'a[data-self_tweet_id]' ).length );
+                } ).first();
+            
+            return $first_retweeter;
+        },
+        
         search_and_click_button_on_stream_item = ( event, button_selector ) => {
             var $region,
                 $target_element,
                 $button;
             
             if ( is_tweet_retweeters_url() ) {
-                $region = $( '[aria-labelledby="modal-header"], main[role="main"]' ).find( 'section[role="region"]' );
-                $target_element = $region.find( 'div[data-testid="UserCell"][data-focusvisible-polyfill="true"]' );
-                
+                $target_element = get_current_retweeter();
                 if ( $target_element.length <= 0 ) {
-                    //$target_element = $region.find( 'div[data-testid="UserCell"]:has(a[data-self_tweet_id])' );
-                    $target_element = $region.find( 'div[data-testid="UserCell"]' ).filter( function () {
-                        return ( 0 < $( this ).find( 'a[data-self_tweet_id]' ) );
-                    } );
+                    $target_element = get_first_retweeter();
                 }
             }
             else {
@@ -4173,10 +4214,57 @@ function start_key_observer() {
     
     var move_timer_id = null;
     
-    $( d ).on( 'keypress.main', function ( event ) {
+    $( d.body ).on( 'keypress.main', function ( event ) {
         if ( ! is_tweet_retweeters_url() ) {
             return;
         }
+        
+        if ( ! is_key_acceptable() ) {
+            return;
+        }
+        
+        var key_code = event.keyCode;
+        
+        if ( ( key_code != 106 ) && ( key_code != 107 ) ) {
+            return;
+        }
+        // 106=[j], 107=[k] のみ、オリジナルの処理を上書き
+        
+        event.stopPropagation();
+        event.preventDefault();
+        
+        var $current_retweeter = get_current_retweeter(),
+            $target_retweeter,
+            $scroll_area;
+        
+        //$current_retweeter.removeAttr( 'data-focusvisible-polyfill' ).removeClass( 'r-1uaug3w' ).blur();
+        $current_retweeter.blur();
+        
+        if ( 0 < $current_retweeter.length ) {
+            $target_retweeter = $current_retweeter.parents().eq( 1 )[ ( key_code == 106 ) ? 'next' : 'prev' ]().find( 'div[data-testid="UserCell"]' );
+            
+            if ( $target_retweeter.length <= 0 ) {
+                $target_retweeter = $current_retweeter;
+            }
+        }
+        else {
+            $target_retweeter = get_first_retweeter();
+        }
+        
+        if ( $target_retweeter.length <= 0 ) {
+            return;
+        }
+        
+        //$target_retweeter.attr( 'data-focusvisible-polyfill', true ).addClass( 'r-1uaug3w' ).focus();
+        if ( 0 < $target_retweeter.parents( 'main[role="main"]' ).length ) {
+            // 画面幅が一定より狭い場合には全画面→スクロールは window 基準
+            $( w ).scrollTop( $target_retweeter.offset().top - 73 );
+        }
+        else {
+            $scroll_area = $target_retweeter.parents( 'section[role="region"]:first' ).parents().eq( 1 );
+            $scroll_area.scrollTop( $scroll_area.scrollTop() + $target_retweeter.offset().top - $scroll_area.offset().top - 24 );
+        }
+        $target_retweeter.focus();
         
         var $tweet_list_parent = $( '.' + VICINITY_TWEET_LIST_PARENT_CLASS );
         
@@ -4184,23 +4272,8 @@ function start_key_observer() {
             return;
         }
         
-        var key_code = event.keyCode;
-        
-        switch ( key_code ) {
-            case 106 : // [j]
-            case 107 : // [k]
-                if ( move_timer_id ) {
-                    clearTimeout( move_timer_id );
-                    move_timer_id = null;
-                }
-                
-                move_timer_id  = setTimeout( () => {
-                    var key_event = new KeyboardEvent( 'keydown', { keyCode : OPTIONS.TOGGLE_RERT_DIALOG_KEYCODE } );
-                    
-                    d.body.dispatchEvent( key_event );
-                }, 1 );
-                break;
-        }
+        // 前後ツイート用コンテナが表示されている場合のみ [j]/[k] で自動でツイート読み込み
+        $target_retweeter.find( '.' + OPEN_VICINITY_TWEETS_BUTTON_CLASS ).click();
     } );
     
 } // end of start_key_observer()
@@ -4867,6 +4940,7 @@ function set_user_css() {
             '@keyframes now_loading {0% {transform: rotate(0deg);} 100% {transform: rotate(360deg);}}',
             open_vicinity_tweets_button_container_selector + '.current a {color: #ff0000!important;}',
             
+            'div[data-testid="UserCell"][data-focusvisible-polyfill="true"] {border: solid 1px #4d90fe;}',
             
             '.' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' {max-height: calc(50% - 53px - 2*8px);}',
             'main[role="main"] .' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' {max-height: initial;}',
