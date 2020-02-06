@@ -2397,7 +2397,9 @@ var create_open_vicinity_tweets_button = ( () => {
                     //tweet_parts = tweet_info.tweet.full_text.split( '' ), // サロゲートペアを含む場合は NG
                     tweet_parts = Array.from( tweet_info.tweet.full_text ),
                     tweet_entities = tweet_info.tweet.entities,
-                    card_info = tweet_info.tweet.card || {};
+                    tweet_extended_entities = tweet_info.tweet.extended_entities,
+                    card_info = tweet_info.tweet.card || {},
+                    media_list = [];
                 
                 log_debug( 'create_tweet_container() tweet_info:', tweet_info, 'rt_info:', rt_info );
                 
@@ -2491,8 +2493,11 @@ var create_open_vicinity_tweets_button = ( () => {
                         }
                     } );
                     
-                    if ( tweet_entities.media ) {
-                        tweet_entities.media.forEach( ( media_info ) => {
+                    media_list = ( tweet_extended_entities && tweet_extended_entities.media ) || tweet_entities.media;
+                    // ※複数画像ある場合でもtweet_entities.media に 1 つしか入らない場合がある（例：https://twitter.com/furyutei/status/1006917155483410432）
+                    
+                    if ( media_list ) {
+                        media_list.forEach( ( media_info ) => {
                             var index,
                                 is_image = ! /video/.test( media_info.media_url_https ),
                                 $link = $( '<a><img/></a>' ).attr( {
