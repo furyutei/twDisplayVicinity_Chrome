@@ -146,7 +146,7 @@ var VICINITY_LINK_CONTAINER_CLASS = SCRIPT_NAME + '_vicinity_link_container',
         // ポップアップブロック対策に一時的に読み込むページのURLを取得
         // ※なるべく軽いページが望ましい
         // ※非同期で設定しているが、ユーザーがアクションを起こすまでには読み込まれているだろうことを期待
-        var test_url = new URL( '/favicon.ico?_temporary_page=true', d.baseURI ).href;
+        var test_url = new URL( '/favicon.ico', d.baseURI ).href;
         
         fetch( test_url ).then( ( response ) => {
             TEMPORARY_PAGE_URL = test_url;
@@ -761,13 +761,33 @@ var add_vicinity_links_to_tweet = ( () => {
                     //child_window = open_child_window( 'about:blank', '_blank' ), // 空ページを開いておく
                     //→ Firefox でうまく動作しない
                     //  ※ Promise（fetch_user_timeline()）で、「InternalError: "Promise rejection value is a non-unwrappable cross-compartment wrapper."」が発生
-                    child_window = open_child_window( ( TEMPORARY_PAGE_URL || target_info.tweet_url ) + ( /\?/.test( target_info.tweet_url ) ? '&' : '?' ) + '_temporary_page=true', '_blank' ), // 暫定ページを開いておく
+                    temporary_url = ( TEMPORARY_PAGE_URL || target_info.tweet_url ) + ( /\?/.test( target_info.tweet_url ) ? '&' : '?' ) + '_temporary_page=true',
+                    child_window = open_child_window( temporary_url, '_blank' ), // 暫定ページを開いておく
                     
                     open_search_page = () => {
-                        open_child_window( search_parameters.search_url, {
-                            existing_window : child_window,
-                            search_parameters : search_parameters,
-                        } );
+                        var change_url = () => {
+                                // TODO: Firefox だと最初 'about:blank' になっていて、かつ、child_window.location.href にアクセス不可
+                                // → 'about:blank' から temporary_url に遷移する（child_window.location.hrefにアクセス可能になる）のを待つ
+                                if ( child_window.location.href.indexOf( 'http' ) < 0 ) {
+                                    return false;
+                                }
+                                open_child_window( search_parameters.search_url, {
+                                    existing_window : child_window,
+                                    search_parameters : search_parameters,
+                                } );
+                                return true;
+                            },
+                            check_url = () => {
+                                if ( ! change_url() ) {
+                                    return;
+                                }
+                                clearInterval( check_timer_id );
+                            },
+                            check_timer_id = setInterval( () => {
+                                check_url();
+                            }, 100 );
+                        
+                        check_url();
                     };
                 
                 log_debug( 'search_parameters:', search_parameters, 'target_info:', target_info );
@@ -892,6 +912,11 @@ var add_vicinity_links_to_tweet = ( () => {
                         event_element = '',
                         search_parameters = {
                             use_user_timeline : ! ( OPTIONS.USE_SEARCH_TL_BY_DEFAULT ^ ( event.shiftKey || event.altKey || event.ctrlKey ) ),
+                            // TODO: 2020/01下旬頃から、ユーザータイムラインだと遡れないケースがある
+                            //  https://twitter.com/10cube/status/1223098766829309954
+                            //  https://memo.furyutei.work/entry/20200129/1580302153
+                            //use_user_timeline : false,
+                            // → "scripts/disable_graphql_profile_timeline.js" によるパッチで暫定的に対応
                         },
                         
                         finish = ( search_parameters ) => {

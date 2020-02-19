@@ -85,7 +85,7 @@ Object.assign( window, {
         return injected_script_infos;
     },
     
-    inject_code : async ( code ) => {
+    inject_code_sync : ( code ) => {
         let script = create_script();
         
         script.async = false;
@@ -94,6 +94,10 @@ Object.assign( window, {
         document.documentElement.appendChild( script );
         
         script.remove();
+    },
+    
+    inject_code : async ( code ) => {
+        window.inject_code_sync( code );
     },
 } );
 

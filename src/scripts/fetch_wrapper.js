@@ -378,64 +378,66 @@ window.make_fetch_wrapper = ( params ) => {
     } )( window.XMLHttpRequest );
     
     // ◆ window.fetch へのパッチ
-    ( ( original_fetch ) => {
-        window.fetch = ( url, options ) => {
-            var fetch_promise,
-                called_url = url,
-                body = ( options || {} ).body,
-                filter_url_config;
-            
-            try {
-                filter_url_config = get_filter_url_config( url );
-                
-                if ( filter_url_config.name != 'default' ) {
-                    url = filter_url_config.url_filter( url );
-                }
-            }
-            catch ( error ) {
-                console.error( 'fetch()', error, '=> check get_filter_url_config()' );
-            }
-            
-            // リクエストデータを拡張機能に送信
-            write_request_data( {
-                url : called_url,
-                body : body,
-            } );
-            
-            fetch_promise = original_fetch( url, options );
-            
-            return fetch_promise.then( ( response ) => {
-                var original_json_function = response.json;
-                
-                response.json = function () {
-                    var json_promise = original_json_function.apply( response, arguments );
-                    
-                    if ( filter_url_config.name == 'default' ) {
-                        return json_promise;
-                    }
-                    
-                    return json_promise.then( ( original_json ) => {
-                        var replaced_json;
-                        
-                        try {
-                            replaced_json = filter_url_config.response_json_filter( original_json, called_url );
-                            
-                            // レスポンスデータを拡張機能に送信
-                            write_result_data( {
-                                url : called_url,
-                                json : replaced_json,
-                            } );
-                            
-                            return replaced_json;
-                        }
-                        catch ( error ) {
-                            return original_json; // JSON 以外のデータはそのまま返す
-                        }
-                    } );
-                };
-                
-                return response;
-            } );
-        };
-    } )( window.fetch );
+    /*
+    //( ( original_fetch ) => {
+    //    window.fetch = ( url, options ) => {
+    //        var fetch_promise,
+    //            called_url = url,
+    //            body = ( options || {} ).body,
+    //            filter_url_config;
+    //        
+    //        try {
+    //            filter_url_config = get_filter_url_config( url );
+    //            
+    //            if ( filter_url_config.name != 'default' ) {
+    //                url = filter_url_config.url_filter( url );
+    //            }
+    //        }
+    //        catch ( error ) {
+    //            console.error( 'fetch()', error, '=> check get_filter_url_config()' );
+    //        }
+    //        
+    //        // リクエストデータを拡張機能に送信
+    //        write_request_data( {
+    //            url : called_url,
+    //            body : body,
+    //        } );
+    //        
+    //        fetch_promise = original_fetch( url, options );
+    //        
+    //        return fetch_promise.then( ( response ) => {
+    //            var original_json_function = response.json;
+    //            
+    //            response.json = function () {
+    //                var json_promise = original_json_function.apply( response, arguments );
+    //                
+    //                if ( filter_url_config.name == 'default' ) {
+    //                    return json_promise;
+    //                }
+    //                
+    //                return json_promise.then( ( original_json ) => {
+    //                    var replaced_json;
+    //                    
+    //                    try {
+    //                        replaced_json = filter_url_config.response_json_filter( original_json, called_url );
+    //                        
+    //                        // レスポンスデータを拡張機能に送信
+    //                        write_result_data( {
+    //                            url : called_url,
+    //                            json : replaced_json,
+    //                        } );
+    //                        
+    //                        return replaced_json;
+    //                    }
+    //                    catch ( error ) {
+    //                        return original_json; // JSON 以外のデータはそのまま返す
+    //                    }
+    //                } );
+    //            };
+    //            
+    //            return response;
+    //        } );
+    //    };
+    //} )( window.fetch );
+    */
 };
