@@ -784,7 +784,8 @@ var parse_individual_tweet_url = ( () => {
 
 
 function get_retweet_icon( $retweeter_link ) {
-    return $retweeter_link.parents().eq( 1 ).prev().find( 'svg:first' );
+    //return $retweeter_link.parents().eq( 1 ).prev().find( 'svg:first' );
+    return $retweeter_link.parents().eq( 3 ).prev().find( 'svg:first' ); // 2020.08.06: RTアイコンの位置変更に対応
 } // end of get_retweeter_icon()
 
 
