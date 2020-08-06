@@ -6,10 +6,14 @@ window.chrome = ( ( typeof browser != 'undefined' ) && browser.runtime ) ? brows
 const
     injected_script_infos = [],
     
-    create_script = () => {
+    create_script = ( user_specified_nonce ) => {
         let script = document.createElement( 'script' ),
             script_nonce = document.querySelector( 'script[nonce]' ),
             nonce = ( script_nonce ) ? script_nonce.getAttribute( 'nonce' ) : '';
+        
+        if ( user_specified_nonce ) {
+            nonce = user_specified_nonce;
+        }
         
         if ( nonce ) {
             script.setAttribute( 'nonce', nonce );
@@ -74,6 +78,27 @@ Object.assign( window, {
         return injected_script_infos;
     },
     
+    inject_script_sync : ( script_url, nonce ) => {
+        if ( ! /^(https?:)?\/\//.test( script_url ) ) {
+            try {
+                script_url = chrome.extension.getURL( script_url );
+            }
+            catch ( error ) {
+                script_url = new URL( script_url, location.href ).href;
+            }
+        }
+        
+        let script = create_script( nonce );
+        
+        script.async = false;
+        script.src = script_url;
+        
+        //document.documentElement.appendChild( script );
+        document.documentElement.insertBefore( script, document.documentElement.firstChild );
+        
+        script.remove();
+    },
+    
     external_script_injection_ready : async () => {
         await Promise.all(
             injected_script_infos.map( ( info ) => {
@@ -85,8 +110,8 @@ Object.assign( window, {
         return injected_script_infos;
     },
     
-    inject_code_sync : ( code ) => {
-        let script = create_script();
+    inject_code_sync : ( code, nonce ) => {
+        let script = create_script( nonce );
         
         script.async = false;
         script.textContent = code;

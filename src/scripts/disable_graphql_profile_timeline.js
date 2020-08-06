@@ -13,15 +13,21 @@ let observer = new MutationObserver( ( records ) => {
             observer.disconnect();
             
             // https://api.twitter.com/graphql/ を使用させないようにパッチ
-            window.inject_code_sync( [
-                //"console.log( '*** START PATCH ***', window.__INITIAL_STATE__.featureSwitch.config );",
-                //"delete window.__INITIAL_STATE__.featureSwitch.config.responsive_web_graphql_profile_timeline_8331;",
-                "Object.keys( window.__INITIAL_STATE__.featureSwitch.config ).forEach( key => {",
-                "   if ( key.indexOf( 'responsive_web_graphql_profile_timeline' ) < 0 ) return;",
-                //"   console.log( key );",
-                "   delete window.__INITIAL_STATE__.featureSwitch.config[ key ];",
-                "} );",
-            ].join( '\n' ) );
+            if ( 0 <= window.navigator.userAgent.toLowerCase().indexOf( 'firefox' ) ) {
+                // 2020.08.06: Firefox でインラインスクリプトが実行できなくなったため、外部スクリプトとして呼び出し
+                window.inject_script_sync( 'scripts/feature_switch.js' );
+            }
+            else {
+                window.inject_code_sync( [
+                    //"console.log( '*** START PATCH ***', window.__INITIAL_STATE__.featureSwitch.config );",
+                    //"delete window.__INITIAL_STATE__.featureSwitch.config.responsive_web_graphql_profile_timeline_8331;",
+                    "Object.keys( window.__INITIAL_STATE__.featureSwitch.config ).forEach( key => {",
+                    "   if ( key.indexOf( 'responsive_web_graphql_profile_timeline' ) < 0 ) return;",
+                    //"   console.log( '- hit key name: ', key );"
+                    "   delete window.__INITIAL_STATE__.featureSwitch.config[ key ];",
+                    "} );",
+                ].join( '\n' ) );
+            }
         } );
     } );
 

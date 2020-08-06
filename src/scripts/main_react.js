@@ -785,7 +785,8 @@ var parse_individual_tweet_url = ( () => {
 
 function get_retweet_icon( $retweeter_link ) {
     //return $retweeter_link.parents().eq( 1 ).prev().find( 'svg:first' );
-    return $retweeter_link.parents().eq( 3 ).prev().find( 'svg:first' ); // 2020.08.06: RTアイコンの位置変更に対応
+    //return $retweeter_link.parents().eq( 3 ).prev().find( 'svg:first' ); // 2020.08.06: RTアイコンの位置変更に対応
+    return $retweeter_link.parents().filter( ( index, element ) => element.previousSibling ).first().prev().find( 'svg:first' );
 } // end of get_retweeter_icon()
 
 
@@ -2314,7 +2315,9 @@ var create_recent_retweet_users_button = ( () => {
             CURRENT_REFERENCE_TO_RETWEETERS_INFO.status = 'wait_dialog';
             
             if ( ( parse_individual_tweet_url() || {} ).tweet_id == tweet_id ) {
-                $ancestor.find( 'a[href$="retweets"]' ).get( 0 ).click();
+                if ( location.href.indexOf( '/' + tweet_id + '/retweets/' ) < 0 ) {
+                    $ancestor.find( 'a[href$="/retweets"], a[href$="/retweets/with_comments"]' ).get( 0 ).click();
+                }
             }
             else {
                 $ancestor.get( 0 ).click();
@@ -2633,7 +2636,20 @@ var create_open_vicinity_tweets_button = ( () => {
                 */
                 if ( 0 < $user_container.parents( 'main[role="main"]' ).length ) {
                     // 画面幅が一定より狭い場合には全画面→スクロールは window 基準
-                    $( w ).scrollTop( $user_container.offset().top - 73 );
+                    //$( w ).scrollTop( $user_container.offset().top - 73 );
+                    ( ( $nav ) => {
+                        $( w ).scrollTop( $user_container.offset().top - 73 - ( ( 0 < $nav.length ) ? $nav.height() : 0 ) ); // コメント付き／なしタブがある場合は位置をずらす
+                    } )( $( 'main[role="main"] nav[role="navigation"]' ) );
+                    
+                    ( ( left, width ) => {
+                        if ( ( left <= 0 ) || ( width <= 0 ) ) {
+                            return;
+                        }
+                        $tweet_list_parent.css( {
+                            'left' : ( left + 1 ) + 'px',
+                            'width' : ( width - 2 ) + 'px',
+                        } );
+                    } )( $( 'main[role="main"]' ).position().left, $('div[data-testid="primaryColumn"]').width() );
                 }
                 else {
                     $scroll_area = $user_container.parents( 'section[role="region"]:first' ).parents().eq( 1 );
@@ -3022,20 +3038,24 @@ function check_help_dialog() {
         return false;
     }
     
-    var $modal_header_h2_list = $( '[aria-labelledby="modal-header"] h2[role="heading"][aria-level="2"]:not(#modal-header)' );
-    
-    if ( $modal_header_h2_list.length < 1 ) {
-        return false;
-    }
-    
-    var $shortcut_parent = $modal_header_h2_list.last().parents().eq( 1 );
+    /*
+    //var $modal_header_h2_list = $( '[aria-labelledby="modal-header"] h2[role="heading"][aria-level="2"]:not(#modal-header)' );
+    //
+    //if ( $modal_header_h2_list.length < 1 ) {
+    //    return false;
+    //}
+    //
+    //var $shortcut_parent = $modal_header_h2_list.last().parents().eq( 1 );
+    */
+    var $shortcut_parent = $( '[aria-labelledby="modal-header"] ul[role="list"]' ).last();
     
     if ( 0 < $shortcut_parent.find( '.' + SCRIPT_NAME + '_key_help' ).length ) {
         return false;
     }
     
-    var $shortcut_list = $shortcut_parent.children( 'div' );
-    
+    //var $shortcut_list = $shortcut_parent.children( 'div' );
+    var $shortcut_list = $shortcut_parent.children( 'li[role="listitem"]' );
+
     if ( $shortcut_list.length < 1 ) {
         return false;
     }
@@ -3053,6 +3073,10 @@ function check_help_dialog() {
             $shortcut_key = $shortcut_content_container.children().first();
         
         $shortcut_container.addClass( SCRIPT_NAME + '_key_help' );
+        
+        $shortcut_container.attr( {
+            'aria-label': key_info.label + ': ' + key_info.key.toUpperCase(),
+        } );
         
         $shortcut_content_container.empty();
         $shortcut_content_container.append( $shortcut_key );
@@ -3276,7 +3300,7 @@ function check_timeline_tweets() {
                 retweet_number;
             
             if ( tweet_url_info.tweet_id == $recent_retweet_users_button.attr( 'data-tweet-id' ) ) {
-                retweet_number = parseInt( $ancestor.find( 'a[href$="retweets"] span>span' ).text(), 10 );
+                retweet_number = parseInt( $ancestor.find( 'a[href$="/retweets"], a[href$="/retweets/with_comments"]' ).find( 'span>span' ).text(), 10 );
                 if ( ( tweet_url_info.tweet_id == CURRENT_REFERENCE_TO_RETWEETERS_INFO.tweet_id ) && ( CURRENT_REFERENCE_TO_RETWEETERS_INFO.status == 'wait_dialog' ) ) {
                     $recent_retweet_users_button.click();
                 }
@@ -3294,6 +3318,18 @@ function check_timeline_tweets() {
     switch ( CURRENT_REFERENCE_TO_RETWEETERS_INFO.status ) {
         case 'wait_dialog' :
             if ( 0 <= location.href.indexOf( '/' + CURRENT_REFERENCE_TO_RETWEETERS_INFO.tweet_id + '/retweets' ) ) {
+                // TODO: 最初に「コメント付き」を開く→自動的に「コメントなし」タブを開いたほうがよいか？
+                // →保留中
+                /*
+                //if ( 0 <= location.href.indexOf( '/' + CURRENT_REFERENCE_TO_RETWEETERS_INFO.tweet_id + '/retweets/with_comments' ) ) {
+                //    ( ( $without_comments_link ) => {
+                //        if ( 0 < $without_comments_link.length ) {
+                //            $without_comments_link.get( 0 ).click( 0 );// 「コメントなし」タブのクリック
+                //        }
+                //    } )( $( 'div[data-testid="primaryColumn"] a[role="tab"][href$="/without_comments"]' ) );
+                //    break;
+                //}
+                */
                 CURRENT_REFERENCE_TO_RETWEETERS_INFO.status = 'dialog_displayed';
                 CURRENT_REFERENCE_TO_RETWEETERS_INFO.load_button_is_locked = false;
             }
@@ -3318,7 +3354,7 @@ function check_timeline_tweets() {
             break;
     }
     
-    if ( location.href.indexOf( '/' + CURRENT_REFERENCE_TO_RETWEETERS_INFO.tweet_id + '/retweets' ) < 0 ) {
+    if ( ! /\/\d+\/retweets(?:\/with(?:out)?_comments)?\/?/.test( location.href ) ) {
         // 前後ツイートが main[role="main"] 下に付くケースの後始末
         remove_vicinity_tweet_list();
     }
@@ -4336,7 +4372,10 @@ function start_key_observer() {
         //$target_retweeter.attr( 'data-focusvisible-polyfill', true ).addClass( 'r-1uaug3w' ).focus();
         if ( 0 < $target_retweeter.parents( 'main[role="main"]' ).length ) {
             // 画面幅が一定より狭い場合には全画面→スクロールは window 基準
-            $( w ).scrollTop( $target_retweeter.offset().top - 73 );
+            //$( w ).scrollTop( $target_retweeter.offset().top - 73 );
+            ( ( $nav ) => {
+                $( w ).scrollTop( $target_retweeter.offset().top - 73 - ( ( 0 < $nav.length ) ? $nav.height() : 0 ) ); // コメント付き／なしタブがある場合は位置をずらす
+            } )( $( 'main[role="main"] nav[role="navigation"]' ) );
         }
         else {
             $scroll_area = $target_retweeter.parents( 'section[role="region"]:first' ).parents().eq( 1 );
@@ -4450,16 +4489,22 @@ function start_fetch_observer() {
     } );
     
     // コンテンツ側に window.XMLHttpRequest / window.fetch を監視するよう指示
-    inject_code( [
-        'make_fetch_wrapper(', // make_fetch_wrapper() は scripts/fetch_wrapper.js 内にて定義
-        JSON.stringify( {
-            SCRIPT_NAME : SCRIPT_NAME,
-            API_USER_TIMELINE_TEMPLATE : API_USER_TIMELINE_TEMPLATE,
-            OBSERVATION_WRAPPER_ID : OBSERVATION_WRAPPER_ID,
-            OBSERVE_DOM_FETCH_DATA : OPTIONS.OBSERVE_DOM_FETCH_DATA,
-        } ),
-        ');',
-    ].join( '' ) );
+    if ( IS_FIREFOX ) {
+        // 2020.08.06: Firefox でインラインスクリプトが実行できなくなったため、外部スクリプトとして呼び出し
+        window.inject_script_sync( 'scripts/fetch_wrapper_caller.js' );
+    }
+    else {
+        window.inject_code( [
+            'make_fetch_wrapper(', // make_fetch_wrapper() は scripts/fetch_wrapper.js 内にて定義
+            JSON.stringify( {
+                SCRIPT_NAME : SCRIPT_NAME,
+                API_USER_TIMELINE_TEMPLATE : API_USER_TIMELINE_TEMPLATE,
+                OBSERVATION_WRAPPER_ID : OBSERVATION_WRAPPER_ID,
+                OBSERVE_DOM_FETCH_DATA : OPTIONS.OBSERVE_DOM_FETCH_DATA,
+            } ),
+            ');',
+        ].join( '' ) );
+    }
 } // end of start_fetch_observer()
 
 
