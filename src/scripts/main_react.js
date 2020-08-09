@@ -4488,23 +4488,26 @@ function start_fetch_observer() {
         analyze_fetch_data( message );
     } );
     
-    // コンテンツ側に window.XMLHttpRequest / window.fetch を監視するよう指示
-    if ( IS_FIREFOX ) {
-        // 2020.08.06: Firefox でインラインスクリプトが実行できなくなったため、外部スクリプトとして呼び出し
-        window.inject_script_sync( 'scripts/fetch_wrapper_caller.js' );
-    }
-    else {
-        window.inject_code( [
-            'make_fetch_wrapper(', // make_fetch_wrapper() は scripts/fetch_wrapper.js 内にて定義
-            JSON.stringify( {
-                SCRIPT_NAME : SCRIPT_NAME,
-                API_USER_TIMELINE_TEMPLATE : API_USER_TIMELINE_TEMPLATE,
-                OBSERVATION_WRAPPER_ID : OBSERVATION_WRAPPER_ID,
-                OBSERVE_DOM_FETCH_DATA : OPTIONS.OBSERVE_DOM_FETCH_DATA,
-            } ),
-            ');',
-        ].join( '' ) );
-    }
+    /*
+    // 2020.08.09: 呼び出しタイミングを早くするため、load_options.js に移動
+    //// コンテンツ側に window.XMLHttpRequest / window.fetch を監視するよう指示
+    //if ( IS_FIREFOX ) {
+    //    // 2020.08.06: Firefox でインラインスクリプトが実行できなくなったため、外部スクリプトとして呼び出し
+    //    window.inject_script_sync( 'scripts/fetch_wrapper_caller.js' );
+    //}
+    //else {
+    //    window.inject_code( [
+    //        'make_fetch_wrapper(', // make_fetch_wrapper() は scripts/fetch_wrapper.js 内にて定義
+    //        JSON.stringify( {
+    //            SCRIPT_NAME : SCRIPT_NAME,
+    //            API_USER_TIMELINE_TEMPLATE : API_USER_TIMELINE_TEMPLATE,
+    //            OBSERVATION_WRAPPER_ID : OBSERVATION_WRAPPER_ID,
+    //            OBSERVE_DOM_FETCH_DATA : OPTIONS.OBSERVE_DOM_FETCH_DATA,
+    //        } ),
+    //        ');',
+    //    ].join( '' ) );
+    //}
+    */
 } // end of start_fetch_observer()
 
 
@@ -4620,7 +4623,7 @@ function set_user_css() {
             '.' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' {max-height: calc(50% - 53px - 2*8px);}',
             'main[role="main"] .' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' {max-height: initial;}',
             '.' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' div > div > section > div > div > div > div:last-child {}',
-            'main[role="main"] .' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' div > div > section > div > div > div > div:last-child {height: 55vh;}',
+            //'main[role="main"] .' + VICINITY_TWEET_LIST_BASE_CONTAINER_CLASS + ' div > div > section > div > div > div > div:last-child {height: 55vh;}',
             
             vicinity_tweet_list_parent_selector + ' {position: absolute; left: 0; bottom: 0; max-height: 50%; height: 100%; max-width: 100%; width: 100%; z-index:1000; overflow: auto; border-top: solid 1px #ccd6dd; padding: 8px 0; cursor: pointer;}',
             'main[role="main"] ' + vicinity_tweet_list_parent_selector + ' {position: fixed;}',

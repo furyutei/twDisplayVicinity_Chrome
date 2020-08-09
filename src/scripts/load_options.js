@@ -15,7 +15,14 @@ inject_script_all( [
     'scripts/fetch_wrapper.js',
     'scripts/decimal.min.js',
     'scripts/jquery.min.js',
-] );
+] ).then( ( injected_script_infos ) => {
+    // 2020.08.09: 呼び出しタイミングを早くするため、main_react.js から移動
+    // TODO: 動的パラメータの設定はできない（fetch_wrapper_caller.jsの書き換えが必要）
+    inject_script_all( [
+        'scripts/fetch_wrapper_caller.js',
+    ] ).then( ( injected_script_infos ) => {
+    } );
+} );
 
 
 // Firefox(バージョン58以降)では、アドオンの content_scripts 内で XMLHttpRequest や fetch にページ（コンテンツ）上から実行されたのと同じ動作を期待するためには
