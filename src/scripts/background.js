@@ -205,6 +205,22 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     // Error: Type error for parameter extraInfoSpec (Error processing 2: Invalid enumeration value "extraHeaders") for webRequest.onBeforeSendHeaders.
 );
 
+chrome.webRequest.onHeadersReceived.addListener( ( details ) => {
+    let responseHeaders = details.responseHeaders.map( ( element ) => {
+            switch ( element.name.toLowerCase() ) {
+                case 'cross-origin-opener-policy' :
+                    element.value = 'unsafe-none';
+                    break;
+                
+                case 'cross-origin-embedder-policy' :
+                    element.value = 'unsafe-none';
+                    break;
+            }
+            return element;
+        } );
+    return { responseHeaders };
+}, { urls : [ '*://*.twitter.com/*' ] }, [ 'blocking', 'responseHeaders' ] );
+
 } )( window, document );
 
 // ■ end of file
