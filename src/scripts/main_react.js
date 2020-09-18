@@ -4242,7 +4242,7 @@ function start_key_observer() {
                     ( $active_element.attr( 'contenteditable' ) == 'true' )
                 ) ||
                 ( $active_element.prop( 'tagName' ) == 'TEXTAREA' ) ||
-                ( ( $active_element.prop( 'tagName' ) == 'INPUT' ) && ( $active_element.attr( 'type' ).toUpperCase() == 'TEXT' ) )
+                ( ( $active_element.prop( 'tagName' ) == 'INPUT' ) && ( 0 <= [ 'TEXT', 'PASSWORD' ].indexOf( $active_element.attr( 'type' ).toUpperCase() ) ) )
             ) {
                 return false;
             }
