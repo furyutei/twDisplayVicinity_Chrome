@@ -19,7 +19,8 @@ window.make_fetch_wrapper = ( params ) => {
             [ result_dom_id ] : 'FETCH_RESPONSE_DATA',
         },
         
-        reg_api_url = /^https:\/\/api\.twitter\.com\//,
+        reg_api_url = /^(https:\/\/api\.twitter\.com\/|https:\/\/twitter\.com\/i\/api\/)/,
+        // 2020.10.14: APIのURLポイントが https://twitter.com/i/api/2/* になるものが出てきた模様
         
         request_reg_url_list = [
             reg_api_url,
@@ -34,7 +35,6 @@ window.make_fetch_wrapper = ( params ) => {
             
             return ( data, data_dom_id, reg_url_list ) => {
                 var url = data.url;
-                
                 if ( ! reg_url_list.some( reg_url_filter => reg_url_filter.test( url ) ) ) {
                     return;
                 }
@@ -262,7 +262,7 @@ window.make_fetch_wrapper = ( params ) => {
                 filter_url_configs : [
                     {
                         name : 'use_api1.1_instead_of_2',
-                        reg_url : /^https:\/\/api\.twitter\.com\/2\/timeline\/profile\/\d+\.json/,
+                        reg_url : /(^https:\/\/api\.twitter\.com|\/api)\/2\/timeline\/profile\/\d+\.json/,
                         url_filter : url_filter_map[ 'user_timeline_url_2_to_1.1' ],
                         response_json_filter : response_json_filter_map[ 'user_timeline_response_1.1_to_2' ],
                     },
