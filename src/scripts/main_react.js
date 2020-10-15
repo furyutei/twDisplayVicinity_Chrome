@@ -3016,6 +3016,9 @@ function add_vicinity_link_to_tweet( $tweet ) {
             //} );
             */
             get_retweet_icon( $retweeter_link ).after( $link_container );
+            $link_container.parent().css( {
+                'flex-basis' : '46px',
+            } );
         }
     }
     

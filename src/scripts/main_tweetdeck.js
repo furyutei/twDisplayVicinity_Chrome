@@ -1104,7 +1104,8 @@ var add_vicinity_links_to_tweet = ( () => {
                         reaction_key : reaction_key,
                     } ),
                     $link = $link_container.find( 'a:first' ),
-                    $header;
+                    $header,
+                    $time = $();
                 
                 if ( is_tweet_detail ) {
                     // 個別表示の場合はユーザーアクションは表示されない
@@ -1123,8 +1124,14 @@ var add_vicinity_links_to_tweet = ( () => {
                             'margin-right' : '4px',
                         } );
                         $header = $tweet.find( '.activity-header .nbfc:first, .tweet .tweet-context .nbfc:first' );
+                        $time = $header.parent().children( 'time.tweet-timestamp' );
                     }
-                    $header.append( $link_container );
+                    if ( 0 < $time.length ) {
+                        $time.after( $link_container );
+                    }
+                    else {
+                        $header.append( $link_container );
+                    }
                 }
             } )();
             
