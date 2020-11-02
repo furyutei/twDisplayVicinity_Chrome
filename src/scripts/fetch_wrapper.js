@@ -396,19 +396,35 @@ window.make_fetch_wrapper = ( params ) => {
                         }
                         
                         var replaced_json = source_json,
-                            tweets = ( replaced_json.globalObjects || {} ).tweets || {};
+                            tweets = ( replaced_json.globalObjects || {} ).tweets || {},
+                            ext_entries = [];
                         
                         try {
                             replaced_json.timeline.instructions = replaced_json.timeline.instructions
                                 .filter( instruction => {
                                     // TODO: 固定されたツイート(pinEntry)があると検索時に邪魔になってしまう
-                                    // → addEntries 以外は取り除く
+                                    // → 固定されたツイート(pinEntry)を通常のツイートに変換して退避し、addEntries 以外は取り除く
+                                    if ( 'pinEntry' in instruction ) {
+                                        let pin_entry = instruction.pinEntry.entry;
+                                        
+                                        try {
+                                            delete pin_entry.content.item.clientEventInfo;
+                                            delete pin_entry.content.item.content.tweet.socialContext;
+                                            pin_entry.sortIndex = pin_entry.content.item.content.tweet.id;
+                                        }
+                                        catch ( error ) {
+                                        }
+                                        
+                                        ext_entries.push( pin_entry );
+                                        
+                                        return false;
+                                    }
                                     return 'addEntries' in instruction;
                                 } )
                                 .map( instruction => {
                                     // TODO: 会話（ツリー）形式が含まれているとIDが前後するために検索しにくい
                                     // →ツイートID降順に展開
-                                    var entries = instruction.addEntries.entries,
+                                    var entries = instruction.addEntries.entries.concat( ext_entries ),
                                         cursor_top_sort_index = new Decimal( '9153891586667446272' ),
                                         cursor_bottom_sort_index = new Decimal( '0' ),
                                         cursor_top_entries = entries.filter( entry => /^cursor-top-/.test( entry.entryId || '' ) ).map( entry => {
@@ -427,9 +443,23 @@ window.make_fetch_wrapper = ( params ) => {
                                             return entry;
                                         } ),
                                         sort_index_map = {},
-                                        tweet_entries = entries.filter( entry => /^tweet-/.test( entry.entryId || '' ) ).map( entry => {
-                                            sort_index_map[ entry.sortIndex ] = true;
-                                            return entry;
+                                        tweet_entries = entries.filter( entry => /^tweet-/.test( entry.entryId || '' ) ).filter( entry => {
+                                            var sort_index = entry.sortIndex;
+                                            
+                                            if ( sort_index_map[ sort_index ] ) {
+                                                return false;
+                                            }
+                                            sort_index_map[ sort_index ] = true;
+                                            
+                                            // 固定されたツイートの場合は範囲が外れることもあるため、確認
+                                            if ( cursor_top_sort_index.cmp( sort_index ) < 0 ) {
+                                                return false;
+                                            }
+                                            
+                                            if ( cursor_bottom_sort_index.cmp( sort_index ) > 0 ) {
+                                                return false;
+                                            }
+                                            return true;
                                         } ),
                                         home_conversation_tweet_entries = entries.filter( entry => /^(homeConversation)-/.test( entry.entryId || '' ) ).reduce( ( tweet_entries, entry ) => {
                                             entry.content.timelineModule.items.filter( item => {
@@ -444,7 +474,6 @@ window.make_fetch_wrapper = ( params ) => {
                                                 if ( ( tweets[ tweet_id ] || {} ).user_id_str != user_id ) {
                                                     return false;
                                                 }
-                                                
                                                 if ( cursor_top_sort_index.cmp( tweet_id ) < 0 ) {
                                                     return false;
                                                 }
