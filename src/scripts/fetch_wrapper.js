@@ -10,7 +10,9 @@ window.make_fetch_wrapper = ( params ) => {
         params = {};
     }
     
-    var {
+    var required_promises = [],
+        
+        {
             convert_tweet_id_to_cursor,
             convert_cursor_to_tweet_id,
         } = ( () => {
@@ -184,6 +186,8 @@ window.make_fetch_wrapper = ( params ) => {
                 reg_number = /^(\d+)$/,
                 is_with_replies_timeline = () => /^\/([^\/]+)\/with_replies/.test( location.pathname ),
                 
+                global_tweet_info_map = {},
+                
                 url_filter_map = {
                     'default' : null,
                     
@@ -229,10 +233,59 @@ window.make_fetch_wrapper = ( params ) => {
                         
                         if ( location_url_max_id ) {
                             var original_cursor = decodeURIComponent( ( source_url.match( reg_api2_user_timeline_params.cursor ) || [ 0, '' ] )[ 1 ] ),
-                                replaced_cursor = ( new Decimal( location_url_max_id ).cmp( convert_cursor_to_tweet_id( original_cursor ) ) < 0 ) ? convert_tweet_id_to_cursor( location_url_max_id ) : original_cursor;
+                                original_cursor_max_id = convert_cursor_to_tweet_id( original_cursor ),
+                                is_replace_required = ( new Decimal( location_url_max_id ).cmp( original_cursor_max_id ) < 0 ),
+                                replaced_cursor = is_replace_required ? convert_tweet_id_to_cursor( location_url_max_id ) : original_cursor,
+                                request_max_id = ( is_replace_required ) ? location_url_max_id : original_cursor_max_id,
+                                api_user_timeline_url = api_user_timeline_template.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, 100 ) + ( request_max_id ? '&max_id=' + request_max_id : '' );
+                            
+                            try {
+                                // TODO: API2の /2/timeline/profile/<id>.json ではツイートの実体が入ってこないケースがある（会話ツリー途中のツイートなど）
+                                // →並行して API1.1 で取得し、global_tweet_info_map に情報を保存しておく
+                                var fetch_promise = fetch( api_user_timeline_url, {
+                                        method: 'GET',
+                                        headers: {
+                                            'authorization' : 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                                            'x-csrf-token' : document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ],
+                                            'x-twitter-active-user' : 'yes',
+                                            'x-twitter-auth-type' : 'OAuth2Session',
+                                            'x-twitter-client-language' : 'en',
+                                        },
+                                        mode: 'cors',
+                                        credentials : 'include',
+                                    } )
+                                    .then( response => {
+                                        if ( ! response.ok ) {
+                                            throw new Error( 'Network response was not ok' );
+                                        }
+                                        return response.json()
+                                    } )
+                                    .then( result => {
+                                        //console.log( 'fetch() result', result );
+                                        if ( Array.isArray( result ) ) {
+                                            result.map( tweet_info => {
+                                                try {
+                                                    tweet_info.user_id_str = tweet_info.user.id_str;
+                                                }
+                                                catch ( error ) {
+                                                }
+                                                global_tweet_info_map[ tweet_info.id_str ] = tweet_info;
+                                            } );
+                                        }
+                                        //console.log( 'global_tweet_info_map:', global_tweet_info_map );
+                                    } )
+                                    .catch( error => {
+                                        console.error( 'fetch() error', error, api_user_timeline_url );
+                                    } );
+                                
+                                required_promises.push( fetch_promise );
+                            }
+                            catch ( error ) {
+                                console.error( 'fetch() failure', error, api_user_timeline_url );
+                            }
                             
                             //console.log( 'original_cursor=', original_cursor );
-                            //console.log( 'convert_cursor_to_tweet_id( original_cursor )', convert_cursor_to_tweet_id( original_cursor ).toString() );
+                            //console.log( 'convert_cursor_to_tweet_id( original_cursor )', original_cursor_max_id.toString() );
                             //console.log( 'convert_tweet_id_to_cursor( location_url_max_id )', convert_tweet_id_to_cursor( location_url_max_id ) );
                             //console.log( 'replaced_cursor=', replaced_cursor );
                             
@@ -382,6 +435,8 @@ window.make_fetch_wrapper = ( params ) => {
                     */
                     
                     'convert_user_timeline_response' : ( source_json, source_url ) => {
+                        //console.log( 'convert_user_timeline_response(): source_url=', source_url, 'source_json=', source_json );
+                        
                         if ( ! is_with_replies_timeline() ) {
                             // TODO: /with_replies から他の URL に遷移した際に誤動作する
                             // →初期化時だけではなく、その都度判定することで防止
@@ -397,6 +452,7 @@ window.make_fetch_wrapper = ( params ) => {
                         
                         var replaced_json = source_json,
                             tweets = ( replaced_json.globalObjects || {} ).tweets || {},
+                            users = ( replaced_json.globalObjects || {} ).users || {},
                             ext_entries = [];
                         
                         try {
@@ -496,9 +552,68 @@ window.make_fetch_wrapper = ( params ) => {
                                             } );
                                             
                                             return tweet_entries;
+                                        }, [] ),
+                                        excluded_conversation_tweet_ids = entries.filter( entry => /^(homeConversation)-/.test( entry.entryId || '' ) ).reduce( ( tweet_ids, entry ) => {
+                                            try {
+                                                return tweet_ids.concat( entry.content.timelineModule.metadata.conversationMetadata.allTweetIds.filter( tweet_id => {
+                                                    if ( sort_index_map[ tweet_id ] ) {
+                                                        return false;
+                                                    }
+                                                    if ( cursor_top_sort_index.cmp( tweet_id ) < 0 ) {
+                                                        return false;
+                                                    }
+                                                    
+                                                    if ( cursor_bottom_sort_index.cmp( tweet_id ) > 0 ) {
+                                                        return false;
+                                                    }
+                                                    return true;
+                                                } ) );
+                                            }
+                                            catch ( error ) {
+                                                console.error( error );
+                                                return tweet_ids;
+                                            }
+                                        }, [] ),
+                                        excluded_conversation_tweet_entries = excluded_conversation_tweet_ids.reduce( ( tweet_entries, tweet_id ) => {
+                                            if ( ( ! tweets[ tweet_id ] ) && ( ! global_tweet_info_map[ tweet_id ] ) ) {
+                                                return tweet_entries;
+                                            }
+                                            
+                                            if ( ! tweets[ tweet_id ] ) {
+                                                var tweet_info = tweets[ tweet_id ] = global_tweet_info_map[ tweet_id ];
+                                                
+                                                if ( ! users[ tweet_info.user_id_str ] ) {
+                                                    users[ tweet_info.user_id_str ] = tweet_info.user;
+                                                }
+                                            }
+                                            
+                                            tweet_entries.push( {
+                                                content : {
+                                                    item : {
+                                                        content : {
+                                                            tweet : {
+                                                                displayType : 'Tweet',
+                                                                id : tweet_id,
+                                                                minSpacing: 0,
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                entryId : 'tweet-' + tweet_id,
+                                                sortIndex : tweet_id,
+                                            } );
+                                            
+                                            return tweet_entries;
                                         }, [] );
                                     
+                                    if ( excluded_conversation_tweet_entries.length < excluded_conversation_tweet_ids.length ) {
+                                        console.debug( '(*) There are tweets in the conversation that are not included.', excluded_conversation_tweet_ids, 'vs', excluded_conversation_tweet_entries );
+                                        // 覚書：会話の中で、本人のツイート以外でかつRT対象にもなっていないものが含まれているケースだと思われる
+                                    }
+                                    
                                     tweet_entries = tweet_entries.concat( home_conversation_tweet_entries );
+                                    tweet_entries = tweet_entries.concat( excluded_conversation_tweet_entries );
+                                    
                                     tweet_entries.sort( ( a, b ) => {
                                         if ( a.sortIndex == b.sortIndex ) {
                                             return 0;
@@ -519,6 +634,7 @@ window.make_fetch_wrapper = ( params ) => {
                             //console.error( error );
                         }
                         
+                        //replaced_json = JSON.parse( JSON.stringify( replaced_json ) );
                         //console.log( 'response_json_filter(): source_url=', source_url, 'replaced_json=', replaced_json );
                         
                         return replaced_json;
@@ -653,7 +769,27 @@ window.make_fetch_wrapper = ( params ) => {
                 }
             };
             
-            original_prototype_send.apply( xhr, arguments );
+            var saved_arguments = arguments,
+                waiting_promises = required_promises.slice(),
+                send_request = () => {
+                    //console.log( 'Promise.all() result: waiting_promises=', waiting_promises );
+                    original_prototype_send.apply( xhr, saved_arguments );
+                };
+            
+            required_promises = [];
+            
+            if ( waiting_promises.length <= 0 ) {
+                send_request();
+                return;
+            }
+            
+            // ツイート情報取得待ちの状態のときは応答が返るまで send するのを待つ
+            Promise.all( waiting_promises )
+            .then( send_request )
+            .catch( error => {
+                console.error( 'Promise.all() error:', error );
+                send_request();
+            } );
         };
     } )( window.XMLHttpRequest );
     
