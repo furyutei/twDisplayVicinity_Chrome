@@ -237,7 +237,7 @@ window.make_fetch_wrapper = ( params ) => {
                                 is_replace_required = ( new Decimal( location_url_max_id ).cmp( original_cursor_max_id ) < 0 ),
                                 replaced_cursor = is_replace_required ? convert_tweet_id_to_cursor( location_url_max_id ) : original_cursor,
                                 request_max_id = ( is_replace_required ) ? location_url_max_id : original_cursor_max_id,
-                                api_user_timeline_url = api_user_timeline_template.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, 100 ) + ( request_max_id ? '&max_id=' + request_max_id : '' );
+                                api_user_timeline_url = api_user_timeline_template.replace( /#USER_ID#/g, user_id ).replace( /#COUNT#/g, 200 ) + ( request_max_id ? '&max_id=' + request_max_id : '' );
                             
                             try {
                                 // TODO: API2の /2/timeline/profile/<id>.json ではツイートの実体が入ってこないケースがある（会話ツリー途中のツイートなど）
@@ -264,6 +264,18 @@ window.make_fetch_wrapper = ( params ) => {
                                         //console.log( 'fetch() result', result );
                                         if ( Array.isArray( result ) ) {
                                             result.map( tweet_info => {
+                                                var retweeted_tweet_info = tweet_info.retweeted_status;
+                                                
+                                                if ( retweeted_tweet_info ) {
+                                                    tweet_info.retweeted_status_id_str = retweeted_tweet_info.id_str;
+                                                    try {
+                                                        retweeted_tweet_info.user_id_str = retweeted_tweet_info.user.id_str;
+                                                    }
+                                                    catch ( error ) {
+                                                    }
+                                                    global_tweet_info_map[ retweeted_tweet_info.id_str ] = retweeted_tweet_info;
+                                                }
+                                                
                                                 try {
                                                     tweet_info.user_id_str = tweet_info.user.id_str;
                                                 }
@@ -634,7 +646,7 @@ window.make_fetch_wrapper = ( params ) => {
                             //console.error( error );
                         }
                         
-                        //replaced_json = JSON.parse( JSON.stringify( replaced_json ) );
+                        replaced_json = JSON.parse( JSON.stringify( replaced_json ) );
                         //console.log( 'response_json_filter(): source_url=', source_url, 'replaced_json=', replaced_json );
                         
                         return replaced_json;

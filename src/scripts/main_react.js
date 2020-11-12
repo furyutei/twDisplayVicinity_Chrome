@@ -216,10 +216,10 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6
     ADJUST_CHECK_INTERVAL_MS = 100, // 同・チェック間隔(単位：ms)
     ADJUST_ACCEPTABLE_NUMBER = 3, // 同・ツイートのスクロール位置が安定するまでの回数（連続してADJUST_ACCEPTABLE_NUMBER回一致すれば安定したとみなす）
     
-    LIMIT_USER_TIMELINE_TWEET_NUMBER = 40, // statuses/user_timeline の最大取得ツイート数
+    LIMIT_USER_TIMELINE_TWEET_NUMBER = 200, // statuses/user_timeline の最大取得ツイート数
     DEFAULT_USER_TIMELINE_TWEET_NUMBER = 20, // statuses/user_timeline のデフォルト取得ツイート数
     
-    LIMIT_SEARCH_TIMELINE_TWEET_NUMBER = 40, // search/universal の最大取得ツイート数
+    LIMIT_SEARCH_TIMELINE_TWEET_NUMBER = 100, // search/universal の最大取得ツイート数
     DEFAULT_SEARCH_TIMELINE_TWEET_NUMBER = 20, // search/universal のデフォルト取得ツイート数
     
     LIMIT_STATUSES_RETWEETS_USER_NUMBER = 100, // statuses/retweets の最大取得ユーザー数
@@ -1078,6 +1078,9 @@ var [
         reg_notification_view_url = /(^|\/api)\/2\/notifications\/view\/([^\/]+)\.json/,
         // 2020.10.14: APIのURLポイントが https://twitter.com/i/api/2/* になるものが出てきた模様
         
+        reg_graphql = /(^|\/api)\/graphql\//,
+        reg_graphql_retweeters = /(^|\/api)\/graphql\/[^/]+\/Retweeters/,
+        
         reg_capture_url_list = [
             reg_api_2,
         ],
@@ -1094,6 +1097,9 @@ var [
             page_path_info = page_path_info_map[ page_url_path ] = page_path_info_map[ page_url_path ] || {};
         
         if ( ( ! reg_capture_url_list.some( reg_capture_url => reg_capture_url.test( url_path ) ) ) || ( ! globalObjects ) ) {
+            if ( reg_graphql.test( url_path ) ) {
+                analyze_capture_graphql( url, json );
+            }
             return;
         }
         
@@ -1431,6 +1437,97 @@ var [
             page_path_info[ 'user_timeline' ] = true;
         }
     } // end of analyze_capture_result();
+    
+    
+    function analyze_capture_graphql( url, json ) {
+        var url_object = new URL( url ),
+            url_path = url_object.pathname,
+            url_params = url_object.searchParams,
+            
+            analyze_graphql_retweeters = () => {
+                if ( ! reg_graphql_retweeters.test( url_path ) ) {
+                    return;
+                }
+                
+                var tweet_id;
+                
+                try {
+                    tweet_id = JSON.parse( url_params.get( 'variables' ) ).tweetId;
+                }
+                catch ( error ) {
+                    log_error( 'Tweet ID not found', url, json, error );
+                    return;
+                }
+                
+                var reacted_tweet_info = get_stored_tweet_info( tweet_id );
+                
+                if ( ! reacted_tweet_info ) {
+                    return;
+                }
+                
+                // TODO: /graphql/<無作為な?文字列>/Retweeters の場合、リツイートIDや時刻が取得できない
+                // → /1.1/statuses/retweets で取得しなおす
+                // ※頻繁にRTされていると、二つの API 結果にずれが生じる（頻繁にRTされている最中ならば graphql の方の entry.sortIndex を使用しても時刻のずれはそれ程問題にならないかも）
+                var reacted_info_map = reacted_tweet_info.rt_info_map,
+                    entries;
+                
+                try {
+                    entries = json.data.retweeters_timeline.timeline.instructions[ 0 ].entries;
+                }
+                catch ( error ) {
+                    log_error( 'entries not found', url, json, error );
+                    entries = [];
+                }
+                
+                entries.forEach( ( entry ) => {
+                    if ( ( ! entry.entryId ) || ( ! entry.entryId.match( /^user-(.+)$/ ) ) ) {
+                        return;
+                    }
+                    
+                    var user_id = RegExp.$1,
+                        timestamp_ms = 1 * entry.sortIndex, // →これがリツイート時間だと思っていたが、単に現在時刻を元にしたソート用インデックスな模様
+                        user;
+                    
+                    try {
+                        user = entry.content.itemContent.user.legacy;
+                    }
+                    catch ( error ) {
+                        log_error( 'user information not found', entry.entryId, entry );
+                    }
+                    
+                    if ( ! user ) {
+                        return;
+                    }
+                    
+                    var screen_name = user.screen_name,
+                        existing_reacted_info = reacted_info_map.user_id_map[ user_id ],
+                        // 既存のものがある場合(個別ツイートのリツイート情報が既に得られている場合)、id(リツイートのステータスID) と timestamp_ms(リツイートの正確な時刻) は保持
+                        reacted_info = {
+                            id : ( existing_reacted_info ) ? existing_reacted_info.id : '',
+                            user_id : user_id,
+                            screen_name : screen_name,
+                            user_name : user.name,
+                            timestamp_ms : ( existing_reacted_info && ( existing_reacted_info.timestamp_ms < timestamp_ms ) ) ? existing_reacted_info.timestamp_ms : timestamp_ms,
+                        };
+                    
+                    reacted_info_map.user_id_map[ user_id ] = reacted_info_map.screen_name_map[ screen_name ] = reacted_info;
+                } );
+                
+                // /1.1/statuses/retweets で取得しなおして上書き
+                update_tweet_retweeters_info( tweet_id, {
+                    max_user_count : LIMIT_STATUSES_RETWEETS_USER_NUMBER,
+                    cache_sec : 0, // キャッシュは使用しない
+                } )
+                .then( ( result ) => {
+                    log_debug( 'update_tweet_retweeters_info(): result=', result );
+                } )
+                .catch( ( result ) => {
+                    log_error( 'update_tweet_retweeters_info(): error=', result.error, result );
+                } );
+            };
+        
+        analyze_graphql_retweeters();
+    } // end of analyze_capture_graphql()
     
     
     // API1.1 用
@@ -3242,7 +3339,6 @@ function check_timeline_tweets() {
             if ( ! rt_info ) {
                 return;
             }
-            
             
             $link_container = create_vicinity_link_container( {
                 tweet_url : tweet_url,
