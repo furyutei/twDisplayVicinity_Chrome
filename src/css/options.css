@@ -109,6 +109,10 @@ input.button {
     background: #e0ebaf;
 }
 
+.hidden {
+    display: none;
+}
+
 .clearfix:after {
     content: ".";
     font-size: 0px;
