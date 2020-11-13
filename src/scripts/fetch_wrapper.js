@@ -117,7 +117,7 @@ window.make_fetch_wrapper = ( params ) => {
             [ result_dom_id ] : 'FETCH_RESPONSE_DATA',
         },
         
-        reg_api_url = /^(https:\/\/api\.twitter\.com\/|https:\/\/twitter\.com\/i\/api\/)/,
+        reg_api_url = /^(https:\/\/api\.twitter\.com\/|https:\/\/(?:mobile\.)?twitter\.com\/i\/api\/)/,
         // 2020.10.14: APIエンドポイントが https://twitter.com/i/api/2/* になるものが出てきた模様
         // 例）https://api.twitter.com/2/timeline/profile/<user-id>.json → https://twitter.com/i/api/2/timeline/profile/<user-id>.json
         
