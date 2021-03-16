@@ -245,7 +245,7 @@ window.make_fetch_wrapper = ( params ) => {
                                 var fetch_promise = fetch( api_user_timeline_url, {
                                         method: 'GET',
                                         headers: {
-                                            'authorization' : 'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+                                            'authorization' : 'Bearer ' +  ( ( api_user_timeline_url.indexOf( '/2/' ) < 0 ) ? 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKkFp7MM%2BhYBqM%3DbQ0JPmjU9F6ZoMhDfI4uTNAaQuTDm2uO9x3WFVr2xBZ2nhjdP0' : 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA' ),
                                             'x-csrf-token' : document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ],
                                             'x-twitter-active-user' : 'yes',
                                             'x-twitter-auth-type' : 'OAuth2Session',

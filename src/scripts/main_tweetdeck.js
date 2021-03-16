@@ -326,7 +326,8 @@ function get_tweet_id_from_utc_sec( utc_sec ) {
 
 
 var fetch_api_json = ( () => {
-    var api_authorization_bearer = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+    var api_authorization_bearer = 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKkFp7MM%2BhYBqM%3DbQ0JPmjU9F6ZoMhDfI4uTNAaQuTDm2uO9x3WFVr2xBZ2nhjdP0',
+        api2_authorization_bearer = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
         // TODO: 継続して使えるかどうか不明→変更された場合の対応を要検討
         // ※ https://abs.twimg.com/responsive-web/web/main.<version>.js (例：https://abs.twimg.com/responsive-web/web/main.007c24006b6719434.js) 内で定義されている値
         // ※ これを使用しても、一定時間内のリクエスト回数に制限有り→参考；[TwitterのAPI制限 [2019/05/31現在] - Qiita](https://qiita.com/mpyw/items/32d44a063389236c0a65)
@@ -343,9 +344,9 @@ var fetch_api_json = ( () => {
             return csrf_token;
         }, // end of get_api_csrf_token()
         
-        create_api_header = () => {
+        create_api_header = ( api_url ) => {
             return {
-                'authorization' : 'Bearer ' + api_authorization_bearer,
+                'authorization' : 'Bearer ' + ( ( ( api_url || '' ).indexOf( '/2/' ) < 0 ) ? api_authorization_bearer : api2_authorization_bearer ),
                 'x-csrf-token' : get_api_csrf_token(),
                 'x-twitter-active-user' : 'yes',
                 'x-twitter-auth-type' : 'OAuth2Session',
@@ -394,7 +395,7 @@ var fetch_api_json = ( () => {
         fetch_api_json = ( api_url ) => {
             return fetch_json( api_url, {
                 method : 'GET',
-                headers : create_api_header(),
+                headers : create_api_header( api_url ),
                 mode: 'cors',
                 credentials: 'include',
             } );
