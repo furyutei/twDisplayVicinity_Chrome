@@ -216,6 +216,7 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKk
     MAX_ADJUST_SCROLL_NUMBER = 15, // ツイート検索後の位置調整でチェックする最大数
     ADJUST_CHECK_INTERVAL_MS = 100, // 同・チェック間隔(単位：ms)
     ADJUST_ACCEPTABLE_NUMBER = 3, // 同・ツイートのスクロール位置が安定するまでの回数（連続してADJUST_ACCEPTABLE_NUMBER回一致すれば安定したとみなす）
+    MIN_TWEET_FOUND_NUMBER = 3, // 同一ツイートが表示されたとみなすまでの回数（一度表示された後にまた消えてしまうケースがあるため）
     
     LIMIT_USER_TIMELINE_TWEET_NUMBER = 200, // statuses/user_timeline の最大取得ツイート数
     DEFAULT_USER_TIMELINE_TWEET_NUMBER = 20, // statuses/user_timeline のデフォルト取得ツイート数
@@ -311,6 +312,11 @@ var API_AUTHORIZATION_BEARER = 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKk
     DOMAIN_PREFIX = location.hostname.match( /^(.+\.)?twitter\.com$/ )[ 1 ] || '',
     
     TEMPORARY_PAGE_URL = ( () => {
+        if ( IS_FIREFOX ) {
+            // 2021/04: Firefox の場合、子ウィンドウを favicon.ico の URL で開いてから遷移しようとすると error: undefined TypeError: can't access dead object が発生するようになってしまった
+            //return location.href;
+            return null;
+        }
         // ポップアップブロック対策に一時的に読み込むページのURLを取得
         // ※なるべく軽いページが望ましい
         // ※非同期で設定しているが、ユーザーがアクションを起こすまでには読み込まれているだろうことを期待
@@ -2134,7 +2140,12 @@ var open_search_window = ( () => {
                     change_url = () => {
                         // TODO: Firefox だと最初 'about:blank' になっていて、かつ、child_window.location.href にアクセス不可
                         // → 'about:blank' から temporary_url に遷移する（child_window.location.hrefにアクセス可能になる）のを待つ
-                        if ( child_window.location.href.indexOf( 'http' ) < 0 ) {
+                        try {
+                            if ( child_window.location.href.indexOf( 'http' ) < 0 ) {
+                                return false;
+                            }
+                        }
+                        catch ( error ) {
                             return false;
                         }
                         open_child_window( search_parameters.search_url, {
@@ -3489,6 +3500,7 @@ var search_vicinity_tweet = ( () => {
         } )(),
         
         search_status = 'initialize', // 'initialize', 'wait_ready', 'search', 'found', 'error'
+        tweet_found_counter = 0,
         stop_scrolling_request = false,
         
         $primary_column = $(),
@@ -3881,7 +3893,7 @@ var search_vicinity_tweet = ( () => {
                     retweeter_screen_name : get_retweeter_screen_name( $found_tweet ),
                 };
                 
-                start_adjust_handler();
+                //start_adjust_handler();
                 
                 log_debug( '[target tweet was found] is_self:', is_itself, 'tweet:', $found_tweet, 'contaner:', $found_tweet_container );
                 
@@ -4112,10 +4124,20 @@ var search_vicinity_tweet = ( () => {
                 $found_tweet_container = search_tweet();
                 
                 if ( 0 < $found_tweet_container.length ) {
-                    stop_giveup_handler();
-                    //stop_cancel_handler(); // ここでは止めない（スクロール位置調整中にも止めたいため）
-                    search_status = 'found';
+                    // 目的ツイートが一度タイムラインに現れた後、カード表示などの関係でスクロールアウトしてしまうケースあり
+                    // →やむを得ず、連続して現れることを確認してから処理を進めるようにする
+                    tweet_found_counter ++;
+                    if ( MIN_TWEET_FOUND_NUMBER <= tweet_found_counter ) {
+                        start_adjust_handler();
+                        stop_giveup_handler();
+                        //stop_cancel_handler(); // ここでは止めない（スクロール位置調整中にも止めたいため）
+                        search_status = 'found';
+                    }
                 }
+                else {
+                    tweet_found_counter = 0;
+                }
+                log_debug( '* tweet_found_counter:', tweet_found_counter );
                 break;
             
             case 'found' :
