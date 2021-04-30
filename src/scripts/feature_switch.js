@@ -1,12 +1,32 @@
 ( () => {
-'use strict';
-
-//console.log( '*** START PATCH ***', window.__INITIAL_STATE__.featureSwitch.config );
-//console.log( JSON.stringify( window.__INITIAL_STATE__, null, 4 ) );
-//delete window.__INITIAL_STATE__.featureSwitch.config.responsive_web_graphql_profile_timeline_8331;
-Object.keys( window?.__INITIAL_STATE__?.featureSwitch?.config || {} ).forEach( key => {
-    if ( key.indexOf( 'responsive_web_graphql_profile_timeline' ) < 0 ) return;
-    //console.log( '- hit key name: ', key );
-    delete window.__INITIAL_STATE__.featureSwitch.config[ key ];
-} );
+    'use strict';
+    
+    const
+        DEBUG = document.documentElement.dataset.twdvDebug,
+        featureSwitch = window.__INITIAL_STATE__?.featureSwitch;
+    
+    if ( DEBUG ) {
+        console.debug( '*** START PATCH ***', featureSwitch );
+        console.debug( 'window.__INITIAL_STATE__ = ', JSON.stringify( window.__INITIAL_STATE__, null, 4 ) );
+    }
+    if ( ! featureSwitch ) {
+        console.error( '[twDisplayVicinity] featureSwitch not found' );
+        return;
+    }
+    
+    try {
+        if ( DEBUG ) console.debug( 'featureSwitch.defaultConfig.responsive_web_graphql_profile_timeline.value:', featureSwitch.defaultConfig.responsive_web_graphql_profile_timeline.value, '=>', false );
+        featureSwitch.defaultConfig.responsive_web_graphql_profile_timeline.value = false;
+    }
+    catch ( error ) {
+        console.error( '[twDisplayVicinity]', error );
+    }
+    
+    try {
+        if ( DEBUG ) console.debug( 'featureSwitch.user.config.responsive_web_graphql_profile_timeline.value:', featureSwitch.user.config.responsive_web_graphql_profile_timeline.value, '=>', false );
+        featureSwitch.user.config.responsive_web_graphql_profile_timeline.value = false;
+    }
+    catch ( error ) {
+        console.error( '[twDisplayVicinity]', error );
+    }
 } )();
