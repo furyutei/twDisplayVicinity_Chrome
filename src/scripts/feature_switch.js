@@ -3,7 +3,18 @@
 
 const
     DEBUG = document.documentElement.dataset.twdvDebug,
+    key_map = {},
     observer = new MutationObserver( ( records ) => {
+        if ( DEBUG ) {
+            Object.keys( window ).map( key => {
+                console.log( '[keyname]', key );
+                if ( /^_/.test( key ) ) {
+                   console.log(key, window[key], JSON.stringify(window[key], null, 4));
+                }
+                key_map[ key ] = true;
+            } );
+        }
+        
         if ( ! window.__INITIAL_STATE__ ) {
             return;
         }

@@ -308,6 +308,33 @@ window.make_fetch_wrapper = ( params ) => {
                         
                         return replaced_url;
                     },
+                    
+                    'convert_GraphqlUserTweetsAndReplies_url' : ( source_url ) => {
+                        var location_url_max_id = ( location.href.match( reg_location_url_max_id ) || [ 0, '' ] )[ 1 ],
+                            replaced_url = source_url;
+                        
+                        if ( location_url_max_id ) {
+                            var url_obj = new URL( source_url ),
+                                variables_json = url_obj.searchParams.get( 'variables' );
+                            
+                            if ( variables_json ) {
+                                try {
+                                    var variables = JSON.parse( variables_json );
+                                    if ( ! variables.cursor ) {
+                                        variables.cursor = convert_tweet_id_to_cursor( location_url_max_id );
+                                        url_obj.searchParams.set( 'variables', JSON.stringify( variables ) );
+                                        url_obj.searchParams.set( 'includePromotedContent', false );
+                                        //url_obj.searchParams.set( 'withHighlightedLabel', false );
+                                        //url_obj.searchParams.set( 'withNonLegacyCard', false );
+                                        replaced_url = url_obj.href;
+                                    }
+                                }
+                                catch ( error ) {
+                                }
+                            }
+                        }
+                        return replaced_url;
+                    }
                 },
                 
                 response_json_filter_map = {
@@ -651,6 +678,110 @@ window.make_fetch_wrapper = ( params ) => {
                         
                         return replaced_json;
                     },
+                    
+                    'convert_GraphqlUserTweetsAndReplies_response' : ( source_json, source_url ) => {
+                        //console.log( '###', source_json, JSON.stringify( source_json, null, 4 ), source_url );
+                        var replaced_json = source_json,
+                            user_id = JSON.parse( new URL( source_url ).searchParams.get( 'variables' ) ).userId,
+                            location_url_max_id = ( location.href.match( reg_location_url_max_id ) || [ 0, '' ] )[ 1 ],
+                            location_url_max_id_decimal = location_url_max_id ? new Decimal( location_url_max_id ) : null;
+                        
+                        try {
+                            var timeline = replaced_json.data.user.result.timeline.timeline,
+                                instructions = timeline.instructions,
+                                TimelineAddEntries = instructions.filter( instruction => instruction.type == 'TimelineAddEntries' )[ 0 ],
+                                entries = TimelineAddEntries.entries,
+                                TimelinePinEntry = instructions.filter( instruction => instruction.type == 'TimelinePinEntry' )[ 0 ],
+                                cursorTopEntry = entries.filter( entry => entry.content.cursorType == 'Top' )[ 0 ],
+                                cursorBottomEntry = entries.filter( entry => entry.content.cursorType == 'Bottom' )[ 0 ],
+                                cursorTopSortIndex = new Decimal( cursorTopEntry.sortIndex ),
+                                cursorBottomSortIndex = new Decimal( cursorBottomEntry.sortIndex ),
+                                extract_entries = [];
+                            
+                            entries = entries.filter( entry => entry.content.cursorType != 'Top' && entry.content.cursorType != 'Bottom' );
+                            
+                            entries.map( entry => {
+                                var content = entry.content;
+                                
+                                if ( ( content.entryType != 'TimelineTimelineModule' ) || ( content.displayType != "VerticalConversation" ) || ( ! content.items ) ) {
+                                    return;
+                                }
+                                entry.delete_request = true;
+                                
+                                extract_entries = extract_entries.concat( content.items.map( item => {
+                                    var tweet_id = item.item.itemContent.tweet_results.result.rest_id, // item.item.itemContent.tweet_results.result.legacy.id_str,
+                                        entry = {
+                                            entryId : "tweet-" + tweet_id,
+                                            sortIndex : tweet_id,
+                                            content : {
+                                                entryType : 'TimelineTimelineItem',
+                                                itemContent : item.item.itemContent,
+                                            },
+                                        };
+                                    return entry;
+                                } ) );
+                            } );
+                            
+                            entries = entries.concat( extract_entries );
+                            
+                            if ( TimelinePinEntry ) {
+                                try {
+                                    delete TimelinePinEntry.entry.content.clientEventInfo;
+                                    delete TimelinePinEntry.entry.content.itemContent.socialContext;
+                                    TimelinePinEntry.entry.sortIndex = TimelinePinEntry.entry.content.itemContent.tweet_results.result.rest_id;
+                                    entries.push( TimelinePinEntry.entry );
+                                    timeline.instructions = instructions.filter( instruction => instruction.type != 'TimelinePinEntry' );
+                                }
+                                catch ( error ) {
+                                    console.error( 'Unsupported PinEntry: TimelinePinEntry=', TimelinePinEntry, 'error=', error );
+                                }
+                            }
+                            
+                            entries = entries.filter( entry => {
+                                if ( entry.delete_request ) {
+                                    return false;
+                                }
+                                try {
+                                    if ( entry.content.itemContent.tweet_results.result.legacy.user_id_str !== user_id ) {
+                                        if ( ! entry.content.itemContent.tweet_results.result.legacy.retweeted_status_result ) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                                catch ( error ) {
+                                    console.error( 'Unsupported Entry: entry=', entry, 'error=', error );
+                                    return false;
+                                }
+                                if ( cursorTopSortIndex.cmp( entry.sortIndex ) < 0 ) {
+                                    return false;
+                                }
+                                if ( cursorBottomSortIndex.cmp( entry.sortIndex ) > 0 ) {
+                                    return false;
+                                }
+                                if ( location_url_max_id_decimal && ( location_url_max_id_decimal.cmp( entry.sortIndex ) < 0 ) ) {
+                                    return false;
+                                }
+                                return true;
+                            } ).sort( ( a, b ) => {
+                                if ( a.sortIndex == b.sortIndex ) {
+                                    return 0;
+                                }
+                                if ( new Decimal( a.sortIndex ).cmp( b.sortIndex ) < 0 ) {
+                                    return 1;
+                                }
+                                return -1;
+                            } );
+                            
+                            entries.push( cursorTopEntry );
+                            entries.push( cursorBottomEntry );
+                            
+                            TimelineAddEntries.entries = entries;
+                        }
+                        catch ( error ) {
+                            console.error( 'Unsupported UserTweetsAndReplies: error=', error );
+                        }
+                        return replaced_json;
+                    },
                 };
             
             return [ url_filter_map, response_json_filter_map ];
@@ -673,6 +804,12 @@ window.make_fetch_wrapper = ( params ) => {
                         reg_url : /(^https:\/\/api\.twitter\.com|\/api)\/2\/timeline\/profile\/\d+\.json/,
                         url_filter : url_filter_map[ 'convert_user_timeline_url' ],
                         response_json_filter : response_json_filter_map[ 'convert_user_timeline_response' ],
+                    },
+                    {
+                        name : 'patch_graphql',
+                        reg_url : /\/graphql\/(.*?)\/UserTweetsAndReplies/,
+                        url_filter : url_filter_map[ 'convert_GraphqlUserTweetsAndReplies_url' ],
+                        response_json_filter : response_json_filter_map[ 'convert_GraphqlUserTweetsAndReplies_response' ],
                     },
                 ],
             },

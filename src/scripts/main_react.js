@@ -1087,6 +1087,7 @@ var [
         
         reg_graphql = /(^|\/api)\/graphql\//,
         reg_graphql_retweeters = /(^|\/api)\/graphql\/[^/]+\/Retweeters/,
+        reg_graphql_UserTweetsAndReplies = /(^|\/api)\/graphql\/[^/]+\/UserTweetsAndReplies/,
         
         reg_capture_url_list = [
             reg_api_2,
@@ -1531,9 +1532,94 @@ var [
                 .catch( ( result ) => {
                     log_error( 'update_tweet_retweeters_info(): error=', result.error, result );
                 } );
+            },
+            
+            analyze_graphql_UserTweetsAndReplies = () => {
+                if ( ! reg_graphql_UserTweetsAndReplies.test( url_path ) ) {
+                    return;
+                }
+                
+                var entries = json.data.user.result.timeline.timeline.instructions[ 0 ].entries,
+                    tweets = entries.reduce( ( tweets, entry ) => {
+                        if ( ( ! entry.content.itemContent ) || ( ! entry.content.itemContent.tweet_results ) ) {
+                            return tweets;
+                        }
+                        var tweet_result = entry.content.itemContent.tweet_results.result,
+                            tweet = tweet_result.legacy,
+                            user = tweet_result.core.user.legacy,
+                            retweetd_status_result = tweet_result.legacy.retweeted_status_result;
+                        
+                        tweet.user = user;
+                        tweets[ tweet.id_str ] = tweet;
+                        
+                        if ( retweetd_status_result ) {
+                            var retweeted_result = retweetd_status_result.result,
+                                retweeted_tweet = retweeted_result.legacy,
+                                retweeted_user = retweeted_result.core.user.legacy;
+                            
+                            tweet.retweeted_status_id_str = retweeted_tweet.id_str;
+                            retweeted_tweet.user = retweeted_user;
+                            tweets[ retweeted_tweet.id_str ] = retweeted_tweet;
+                        }
+                        else {
+                            tweet.retweeted_status_id_str = null;
+                        }
+                        return tweets;
+                    }, {} ),
+                    
+                    get_tweet_info = ( tweet_id ) => {
+                        var tweet = tweets[ tweet_id ],
+                            tweet_info = tweet_info_map[ tweet_id ] = tweet_info_map[ tweet_id ] || {
+                                rt_info_map : { tweet_id_map : {}, user_id_map : {}, screen_name_map : {} },
+                                like_info_map : { user_id_map : {}, screen_name_map : {} },
+                            },
+                            user_id = tweet.user_id_str,
+                            user = tweet.user;
+                        
+                        Object.assign( tweet_info, {
+                            id : tweet_id,
+                            user_id : user_id,
+                            screen_name : user.screen_name,
+                            user_name : user.name,
+                            timestamp_ms : Date.parse( tweet.created_at ),
+                            reacted_id : tweet.retweeted_status_id_str,
+                            tweet : tweet,
+                        } );
+                        
+                        return tweet_info;
+                    },
+                    
+                    update = ( tweet ) => {
+                        var tweet_id = tweet.id_str,
+                            tweet_info = get_tweet_info( tweet_id ),
+                            reacted_id = tweet_info.reacted_id;
+                        
+                        if ( ! reacted_id ) {
+                            return;
+                        }
+                        
+                        var retweeted_tweet_info = get_tweet_info( reacted_id ),
+                            user_id = tweet_info.user_id,
+                            screen_name = tweet_info.screen_name,
+                            rt_info = {
+                                id : tweet_id,
+                                user_id : user_id,
+                                screen_name : screen_name,
+                                user_name : tweet_info.user_name,
+                                timestamp_ms : tweet_info.timestamp_ms,
+                            },
+                            rt_info_map = retweeted_tweet_info.rt_info_map;
+                        
+                        rt_info_map.tweet_id_map[ tweet_id ] = rt_info_map.user_id_map[ user_id ] = rt_info_map.screen_name_map[ screen_name ] = rt_info;
+                    };
+                
+                for ( var [ key, tweet ] of Object.entries( tweets ) ) {
+                    update( tweet );
+                }
             };
         
         analyze_graphql_retweeters();
+        analyze_graphql_UserTweetsAndReplies();
     } // end of analyze_capture_graphql()
     
     
@@ -4124,6 +4210,14 @@ var search_vicinity_tweet = ( () => {
                 $found_tweet_container = search_tweet();
                 
                 if ( 0 < $found_tweet_container.length ) {
+                    ( ( $found_tweet_container ) => {
+                        scroll_to( $found_tweet_container.offset().top - ( $( w ).height() / 2 ) );
+                        // 見つけた時点では offset().top の値が小さく画面に入っていない場合があるため、一定時間後に再度スクロール指示
+                        setTimeout( () => {
+                            scroll_to( $found_tweet_container.offset().top - ( $( w ).height() / 2 ) );
+                        }, ADJUST_CHECK_INTERVAL_MS );
+                    } )( $found_tweet_container );
+                    
                     // 目的ツイートが一度タイムラインに現れた後、カード表示などの関係でスクロールアウトしてしまうケースあり
                     // →やむを得ず、連続して現れることを確認してから処理を進めるようにする
                     tweet_found_counter ++;
