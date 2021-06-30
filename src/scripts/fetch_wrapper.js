@@ -121,6 +121,9 @@ window.make_fetch_wrapper = ( params ) => {
         // 2020.10.14: APIエンドポイントが https://twitter.com/i/api/2/* になるものが出てきた模様
         // 例）https://api.twitter.com/2/timeline/profile/<user-id>.json → https://twitter.com/i/api/2/timeline/profile/<user-id>.json
         
+        api1_bearer = 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKkFp7MM%2BhYBqM%3DbQ0JPmjU9F6ZoMhDfI4uTNAaQuTDm2uO9x3WFVr2xBZ2nhjdP0',
+        api2_bearer = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+        
         request_reg_url_list = [
             reg_api_url,
         ],
@@ -245,7 +248,7 @@ window.make_fetch_wrapper = ( params ) => {
                                 var fetch_promise = fetch( api_user_timeline_url, {
                                         method: 'GET',
                                         headers: {
-                                            'authorization' : 'Bearer ' +  ( ( api_user_timeline_url.indexOf( '/2/' ) < 0 ) ? 'AAAAAAAAAAAAAAAAAAAAAF7aAAAAAAAASCiRjWvh7R5wxaKkFp7MM%2BhYBqM%3DbQ0JPmjU9F6ZoMhDfI4uTNAaQuTDm2uO9x3WFVr2xBZ2nhjdP0' : 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA' ),
+                                            'authorization' : 'Bearer ' +  ( ( api_user_timeline_url.indexOf( '/2/' ) < 0 ) ? api1_bearer : api2_bearer ),
                                             'x-csrf-token' : document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ],
                                             'x-twitter-active-user' : 'yes',
                                             'x-twitter-auth-type' : 'OAuth2Session',
@@ -321,12 +324,88 @@ window.make_fetch_wrapper = ( params ) => {
                                 try {
                                     var variables = JSON.parse( variables_json );
                                     if ( ! variables.cursor ) {
+                                        //[variables]
+                                        //  count: 20
+                                        //  cursor: "<cursor>"
+                                        //  includePromotedContent: true
+                                        //  userId: "<userId>"
+                                        //  withBirdwatchPivots: false
+                                        //  withHighlightedLabel: true
+                                        //  withNonLegacyCard: true
+                                        //  withReactions: false
+                                        //  withSuperFollowsTweetFields: false
+                                        //  withTweetQuoteCount: true
+                                        //  withTweetResult: true
+                                        //  withUserResults: false
+                                        //  withVoice: false
                                         variables.cursor = convert_tweet_id_to_cursor( location_url_max_id );
                                         url_obj.searchParams.set( 'variables', JSON.stringify( variables ) );
-                                        url_obj.searchParams.set( 'includePromotedContent', false );
+                                        //url_obj.searchParams.set( 'includePromotedContent', false );
                                         //url_obj.searchParams.set( 'withHighlightedLabel', false );
                                         //url_obj.searchParams.set( 'withNonLegacyCard', false );
                                         replaced_url = url_obj.href;
+                                    }
+                                    
+                                    var original_cursor_max_id = convert_cursor_to_tweet_id( variables.cursor ),
+                                        request_max_id = ( new Decimal( location_url_max_id ).cmp( original_cursor_max_id ) < 0 ) ? location_url_max_id : original_cursor_max_id,
+                                        api_user_timeline_url = api_user_timeline_template.replace( /#USER_ID#/g, variables.userId ).replace( /#COUNT#/g, 200 ) + ( request_max_id ? '&max_id=' + request_max_id : '' );
+                                    
+                                    //console.log( '(*) api_user_timeline_url=', api_user_timeline_url );
+                                    try {
+                                        // TODO: /api/graphql/*/UserTweetsAndReplies ではツイートの実体が入ってこないケースがある（会話ツリー途中のツイートなど）
+                                        // →並行して API1.1 で取得し、global_tweet_info_map に情報を保存しておく
+                                        var fetch_promise = fetch( api_user_timeline_url, {
+                                                method: 'GET',
+                                                headers: {
+                                                    'authorization' : 'Bearer ' +  ( ( api_user_timeline_url.indexOf( '/2/' ) < 0 ) ? api1_bearer : api2_bearer ),
+                                                    'x-csrf-token' : document.cookie.match( /ct0=(.*?)(?:;|$)/ )[ 1 ],
+                                                    'x-twitter-active-user' : 'yes',
+                                                    'x-twitter-auth-type' : 'OAuth2Session',
+                                                    'x-twitter-client-language' : 'en',
+                                                },
+                                                mode: 'cors',
+                                                credentials : 'include',
+                                            } )
+                                            .then( response => {
+                                                if ( ! response.ok ) {
+                                                    throw new Error( 'Network response was not ok' );
+                                                }
+                                                return response.json()
+                                            } )
+                                            .then( result => {
+                                                //console.log( 'fetch() result', result );
+                                                if ( Array.isArray( result ) ) {
+                                                    result.map( tweet_info => {
+                                                        var retweeted_tweet_info = tweet_info.retweeted_status;
+                                                        
+                                                        if ( retweeted_tweet_info ) {
+                                                            tweet_info.retweeted_status_id_str = retweeted_tweet_info.id_str;
+                                                            try {
+                                                                retweeted_tweet_info.user_id_str = retweeted_tweet_info.user.id_str;
+                                                            }
+                                                            catch ( error ) {
+                                                            }
+                                                            global_tweet_info_map[ retweeted_tweet_info.id_str ] = retweeted_tweet_info;
+                                                        }
+                                                        
+                                                        try {
+                                                            tweet_info.user_id_str = tweet_info.user.id_str;
+                                                        }
+                                                        catch ( error ) {
+                                                        }
+                                                        global_tweet_info_map[ tweet_info.id_str ] = tweet_info;
+                                                    } );
+                                                }
+                                                //console.log( 'global_tweet_info_map:', global_tweet_info_map );
+                                            } )
+                                            .catch( error => {
+                                                console.error( 'fetch() error', error, api_user_timeline_url );
+                                            } );
+                                        
+                                        required_promises.push( fetch_promise );
+                                    }
+                                    catch ( error ) {
+                                        console.error( 'fetch() failure', error, api_user_timeline_url );
                                     }
                                 }
                                 catch ( error ) {
@@ -680,7 +759,7 @@ window.make_fetch_wrapper = ( params ) => {
                     },
                     
                     'convert_GraphqlUserTweetsAndReplies_response' : ( source_json, source_url ) => {
-                        //console.log( '###', source_json, JSON.stringify( source_json, null, 4 ), source_url );
+                        //console.log( '###', source_json, JSON.stringify( source_json, null, 4 ), source_url, JSON.parse( JSON.stringify( source_json, null, 4 ) ) );
                         var replaced_json = source_json,
                             user_id = JSON.parse( new URL( source_url ).searchParams.get( 'variables' ) ).userId,
                             location_url_max_id = ( location.href.match( reg_location_url_max_id ) || [ 0, '' ] )[ 1 ],
@@ -696,12 +775,29 @@ window.make_fetch_wrapper = ( params ) => {
                                 cursorBottomEntry = entries.filter( entry => entry.content.cursorType == 'Bottom' )[ 0 ],
                                 cursorTopSortIndex = new Decimal( cursorTopEntry.sortIndex ),
                                 cursorBottomSortIndex = new Decimal( cursorBottomEntry.sortIndex ),
-                                extract_entries = [];
+                                extract_entries = [],
+                                tweet_id_map = {},
+                                meta_tweet_id_list = [],
+                                core_info = null;
                             
                             entries = entries.filter( entry => entry.content.cursorType != 'Top' && entry.content.cursorType != 'Bottom' );
                             
                             entries.map( entry => {
                                 var content = entry.content;
+                                
+                                try {
+                                    var tweet_id = entry.content.itemContent.tweet_results.result.rest_id;
+                                    tweet_id_map[ tweet_id ] = tweet_id;
+                                }
+                                catch ( error ) {
+                                }
+                                try {
+                                    if ( ( ! core_info ) && ( user_id == entry.content.itemContent.tweet_results.result.core.user.rest_id ) ) {
+                                        core_info = entry.content.itemContent.tweet_results.result.core;
+                                    }
+                                }
+                                catch ( error ) {
+                                }
                                 
                                 if ( ( content.entryType != 'TimelineTimelineModule' ) || ( content.displayType != "VerticalConversation" ) || ( ! content.items ) ) {
                                     return;
@@ -718,24 +814,111 @@ window.make_fetch_wrapper = ( params ) => {
                                                 itemContent : item.item.itemContent,
                                             },
                                         };
+                                    tweet_id_map[ tweet_id ] = tweet_id;
                                     return entry;
                                 } ) );
+                                
+                                try {
+                                    meta_tweet_id_list = meta_tweet_id_list.concat( content.metadata.conversationMetadata.allTweetIds );
+                                }
+                                catch ( error ) {
+                                }
                             } );
                             
                             entries = entries.concat( extract_entries );
                             
-                            if ( TimelinePinEntry ) {
+                            ( () => {
+                                if ( ! TimelinePinEntry ) {
+                                    return;
+                                }
+                                
                                 try {
-                                    delete TimelinePinEntry.entry.content.clientEventInfo;
-                                    delete TimelinePinEntry.entry.content.itemContent.socialContext;
-                                    TimelinePinEntry.entry.sortIndex = TimelinePinEntry.entry.content.itemContent.tweet_results.result.rest_id;
+                                    var content = TimelinePinEntry.entry.content,
+                                        tweet_id = content.itemContent.tweet_results.result.rest_id;
+                                    
+                                    delete content.clientEventInfo;
+                                    delete content.itemContent.socialContext;
+                                    
+                                    TimelinePinEntry.entry.sortIndex = tweet_id;
                                     entries.push( TimelinePinEntry.entry );
+                                    
+                                    tweet_id_map[ tweet_id ] = tweet_id;
+                                    try {
+                                        meta_tweet_id_list = meta_tweet_id_list.concat( content.metadata.conversationMetadata.allTweetIds );
+                                    }
+                                    catch ( error ) {
+                                    }
                                     timeline.instructions = instructions.filter( instruction => instruction.type != 'TimelinePinEntry' );
                                 }
                                 catch ( error ) {
-                                    console.error( 'Unsupported PinEntry: TimelinePinEntry=', TimelinePinEntry, 'error=', error );
+                                    console.info( 'Unsupported PinEntry: TimelinePinEntry=', TimelinePinEntry, 'error=', error );
                                 }
-                            }
+                            } )();
+                            
+                            //console.log( '### core_info=', core_info, 'tweet_id_map=', tweet_id_map, 'meta_tweet_id_list=', meta_tweet_id_list );
+                            
+                            // TODO: /api/graphql/*/UserTweetsAndReplies ではツイートの実体が入ってこないケースがある（会話ツリー途中のツイートなど）
+                            // →並行して API1.1 で取得しておいたものからツイート情報を追加
+                            meta_tweet_id_list.map( tweet_id => {
+                                if ( tweet_id_map[ tweet_id ] ) {
+                                    return;
+                                }
+                                var tweet_info = global_tweet_info_map[ tweet_id ];
+                                
+                                if ( ( ! tweet_info ) || ( user_id != tweet_info.user_id_str ) ) {
+                                    return;
+                                }
+                                
+                                var entry = {
+                                        entryId : "tweet-" + tweet_id,
+                                        sortIndex : tweet_id,
+                                        content : {
+                                            entryType : 'TimelineTimelineItem',
+                                            itemContent : {
+                                                itemType: 'TimelineTweet',
+                                                tweetDisplayType : 'Tweet',
+                                                tweet_results : {
+                                                    result : {
+                                                        __typename : 'Tweet',
+                                                        rest_id : tweet_id,
+                                                        core : ( core_info && ( user_id == tweet_info.user_id_str ) ) ? core_info : {
+                                                            user : {
+                                                                id : '',
+                                                                rest_id : tweet_info.user.id_str,
+                                                                affiliates_highlighted_label : {},
+                                                                legacy : tweet_info.user,
+                                                            },
+                                                        },
+                                                        legacy : tweet_info,
+                                                    }
+                                                }
+                                            },
+                                        },
+                                    };
+                                    
+                                
+                                // TODO: card 情報が存在するとエラーが発生してしまう
+                                delete tweet_info.card;
+                                /*
+                                //var card_info = tweet_info.card,
+                                //    result = entry.content.itemContent.tweet_results.result;
+                                //
+                                //if ( card_info ) {
+                                //    card_info.user_refs = [];
+                                //    result.card = {
+                                //        rest_id : card_info.url,
+                                //        legacy : card_info,
+                                //    }
+                                //}
+                                */
+                                
+                                //console.log( '(*) add entry:', entry, tweet_id, tweet_info );
+                                
+                                entries.push( entry );
+                                tweet_id_map[ tweet_id ] = tweet_id;
+                            } );
+                            
+                            //console.log( entries );
                             
                             entries = entries.filter( entry => {
                                 if ( entry.delete_request ) {
@@ -749,7 +932,7 @@ window.make_fetch_wrapper = ( params ) => {
                                     }
                                 }
                                 catch ( error ) {
-                                    console.error( 'Unsupported Entry: entry=', entry, 'error=', error );
+                                    console.info( 'Unsupported Entry: entry=', entry, 'error=', error );
                                     return false;
                                 }
                                 if ( cursorTopSortIndex.cmp( entry.sortIndex ) < 0 ) {

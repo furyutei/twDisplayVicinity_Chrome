@@ -98,4 +98,7 @@
 , "ENABLED_ON_TWEETDECK_HEADER" : {
     "message" : "TweetDeck での動作"
   }
+, "DOMATION" : {
+    "message" : "贈り物 🎁 歓迎！"
+  }
 }

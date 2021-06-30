@@ -3129,105 +3129,106 @@ function add_vicinity_link_to_tweet( $tweet ) {
         // 個別ツイートへの追加
         
         // - 上部
-        $link_container.addClass( 'large' ).css( {
-        } );
-        $link.css( {
-            'margin-right' : '32px'
-        } );
-        $tweet_caret.before( $link_container );
+        if ( $tweet_caret.prevAll( '.' + VICINITY_LINK_CONTAINER_CLASS ).length < 1 ) {
+            $link_container.addClass( 'large' ).css( {
+            } );
+            $link.css( {
+                'margin-right' : '32px'
+            } );
+            $tweet_caret.before( $link_container );
+        }
         
         // - 下部
-        $link_container_bottom.addClass( 'middle' ).css( {
-            //'float' : 'left'
-        } );
-        $link_bottom.css( {
-            'margin-top' : '16px',
-            //'margin-right' : '16px'
-            'margin-right' : '8px'
-        } );
-        $action_list.append( $link_container_bottom );
+        if ( $action_list.find( '.' + VICINITY_LINK_CONTAINER_CLASS ).length < 1 ) {
+            $link_container_bottom.addClass( 'middle' ).css( {
+                //'float' : 'left'
+            } );
+            $link_bottom.css( {
+                'margin-top' : '16px',
+                //'margin-right' : '16px'
+                'margin-right' : '8px'
+            } );
+            $action_list.append( $link_container_bottom );
+        }
     }
     else {
         // タイムライン上ツイートへの追加
         
         // - 上部
-        $link_container.addClass( 'middle' ).css( {
-        } );
-        $link.css( {
-            'margin-right' : '32px'
-        } );
-        $tweet_time.parent().after( $link_container );
-        
-        /*
-        // - 下部
-        //$link_container_bottom.addClass( 'middle' ).css( {
-        //} );
-        //$link_bottom.css( {
-        //    'margin-top' : '4px',
-        //    'margin-right' : '16px'
-        //} );
-        //$action_list.append( $link_container_bottom );
-        */
+        if ( $tweet_time.parent().nextAll( '.' + VICINITY_LINK_CONTAINER_CLASS ).length < 1 ) {
+            $link_container.addClass( 'middle' ).css( {
+            } );
+            $link.css( {
+                'margin-right' : '32px'
+            } );
+            $tweet_time.parent().after( $link_container );
+        }
     }
     
     var $retweeter_link = get_retweeter_link( $tweet ),
         act_screen_name;
     
     if ( 0 < $retweeter_link.length ) {
-        act_screen_name = ( $retweeter_link.attr( 'href' ) || '' ).replace( /^\//, '' );
+        var $retweeter_link_neighbor = get_retweet_icon( $retweeter_link );
         
-        if ( act_screen_name ) {
-            $link_container = create_vicinity_link_container( {
-                tweet_url : tweet_url,
-                act_screen_name : act_screen_name,
-                attributes : {
-                    'data-event_element' : 'user_retweeted_on_timeline',
-                    'data-timestamp_ms' : timestamp_ms,
-                }
-            } );
+        if ( $retweeter_link_neighbor.nextAll( '.' + VICINITY_LINK_CONTAINER_CLASS ).length < 1 ) {
+            act_screen_name = ( $retweeter_link.attr( 'href' ) || '' ).replace( /^\//, '' );
             
-            $link = $link_container.find( 'a:first' );
-            
-            $link_container.addClass( 'middle' ).css( {
-                'position' : 'absolute',
-                'top' : '0',
-                'left' : '-4px',
-            } );
-            
-            $link.css( {
-                'margin-right' : '32px'
-            } );
-            
-            //$retweeter_link.parents( 'div:has(>div>svg):first' ).find( 'div:has(>svg)' ).append( $link_container );
-            /*
-            //$retweeter_link.parents().each( function () {
-            //    var $svg = $( this ).find( 'svg' );
-            //    
-            //    if ( $svg.length <= 0 ) {
-            //        return;
-            //    }
-            //    $svg.parent().append( $link_container );
-            //    return false;
-            //} );
-            */
-            get_retweet_icon( $retweeter_link ).after( $link_container );
-            $link_container.parent().css( {
-                'flex-basis' : '46px',
-            } );
+            if ( act_screen_name ) {
+                $link_container = create_vicinity_link_container( {
+                    tweet_url : tweet_url,
+                    act_screen_name : act_screen_name,
+                    attributes : {
+                        'data-event_element' : 'user_retweeted_on_timeline',
+                        'data-timestamp_ms' : timestamp_ms,
+                    }
+                } );
+                
+                $link = $link_container.find( 'a:first' );
+                
+                $link_container.addClass( 'middle' ).css( {
+                    'position' : 'absolute',
+                    'top' : '0',
+                    'left' : '-4px',
+                } );
+                
+                $link.css( {
+                    'margin-right' : '32px'
+                } );
+                
+                //$retweeter_link.parents( 'div:has(>div>svg):first' ).find( 'div:has(>svg)' ).append( $link_container );
+                /*
+                //$retweeter_link.parents().each( function () {
+                //    var $svg = $( this ).find( 'svg' );
+                //    
+                //    if ( $svg.length <= 0 ) {
+                //        return;
+                //    }
+                //    $svg.parent().append( $link_container );
+                //    return false;
+                //} );
+                */
+                $retweeter_link_neighbor.after( $link_container );
+                $link_container.parent().css( {
+                    'flex-basis' : '46px',
+                } );
+            }
         }
     }
     
-    var $recent_retweet_users_button_container = create_recent_retweet_users_button( tweet_id ),
-        $recent_retweet_users_button = $recent_retweet_users_button_container.find( 'button:first' ),
-        $retweet_button = $action_list.find( 'div[data-testid="retweet"],div[data-testid="unretweet"]' );
+    var $retweet_button_neighbor = $action_list.find( 'div[data-testid="retweet"],div[data-testid="unretweet"]' ).parent();
     
-    if ( is_individual_tweet ) {
-        $recent_retweet_users_button.css( {
-            'margin-top' : '14px',
-        } );
+    if ( $retweet_button_neighbor.nextAll( '.' + RECENT_RETWEETS_BUTTON_CLASS ).length < 1 ) {
+        var $recent_retweet_users_button_container = create_recent_retweet_users_button( tweet_id ),
+            $recent_retweet_users_button = $recent_retweet_users_button_container.find( 'button:first' );
+        
+        if ( is_individual_tweet ) {
+            $recent_retweet_users_button.css( {
+                'margin-top' : '14px',
+            } );
+        }
+        $retweet_button_neighbor.after( $recent_retweet_users_button_container );
     }
-    $retweet_button.parent().after( $recent_retweet_users_button_container );
-    
     return true;
 } // end of add_vicinity_link_to_tweet()
 
@@ -3389,9 +3390,10 @@ function check_timeline_tweets() {
     // ツイートに近傍検索ボタン挿入
     //var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]:has(div[data-testid="tweet"]):not(:has(.' + VICINITY_LINK_CONTAINER_CLASS + '))' ),
     var $tweets = $( 'div[data-testid="primaryColumn"] article[role="article"]' ).filter( function () {
-            var $tweet = $( this );
+            var $tweet = $( this ),
+                is_individual_tweet = ( $tweet.find( 'a[role="link"] time[datetime]:first' ).length <= 0 );
             
-            return ( ( 0 < $tweet.find( 'div[data-testid="tweet"]' ).length ) && ( $tweet.find( '.' + VICINITY_LINK_CONTAINER_CLASS ).length <= 0 ) );
+            return ( ( 0 < $tweet.find( 'div[data-testid="tweet"]' ).length ) && ( $tweet.find( '.' + VICINITY_LINK_CONTAINER_CLASS + ':not(.' + ACT_CONTAINER_CLASS + ')' ).length <= ( is_individual_tweet ? 1 : 0 ) ) );
         } ),
         tweet_url_info = parse_individual_tweet_url() || {};
     
@@ -4667,20 +4669,41 @@ function start_tweet_observer() {
         },
         
         observer = new MutationObserver( ( records ) => {
-            performance.mark( 'ma1' );
-            on_change( records );
-            performance.mark( 'ma2' );
+            try {
+                stop_observe();
+                performance.mark( 'ma1' );
+                on_change( records );
+                performance.mark( 'ma2' );
+            }
+            catch ( error ) {
+                log_error( 'observer', error );
+            }
+            finally {
+                start_observe();
+            }
         } ),
-        
+        start_observe = () => observer.observe( tweet_container, { childList : true, subtree : true } ),
+        stop_observe = () => observer.disconnect(),
+            
         request_observer = new MutationObserver( ( records ) => {
-            performance.mark( 'mb1' );
-            on_change( records );
-            performance.mark( 'mb2' );
-        } );
+            try {
+                stop_request_observer();
+                performance.mark( 'mb1' );
+                on_change( records );
+                performance.mark( 'mb2' );
+            }
+            catch ( error ) {
+                log_error( 'request_observer', error );
+            }
+            finally {
+                start_request_observer();
+            }
+        } ),
+        start_request_observer = () => request_observer.observe( request_observation_container, { childList : true, subtree : false } ),
+        stop_request_observer = () => request_observer.disconnect();
     
-    observer.observe( tweet_container, { childList : true, subtree : true } );
-    
-    request_observer.observe( request_observation_container, { childList : true, subtree : false } );
+    start_observe();
+    start_request_observer();
     
     $( w ).on( 'scroll', function ( event ) {
         check_user_timeline_end();

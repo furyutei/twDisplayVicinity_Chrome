@@ -98,4 +98,7 @@
 , "ENABLED_ON_TWEETDECK_HEADER" : {
     "message" : "On TweetDeck"
   }
+, "DOMATION" : {
+    "message" : "Your donation is welcome !"
+  }
 }

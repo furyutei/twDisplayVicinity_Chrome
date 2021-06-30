@@ -1247,15 +1247,23 @@ function start_key_observer() {
 
 
 function start_mutation_observer() {
-    new MutationObserver( function ( records ) {
-        log_debug( '*** MutationObserver ***', records );
-        
-        update_display_mode();
-        
-        check_timeline_tweets( d.body );
-        
-        check_help_dialog();
-    } ).observe( d.body, { childList : true, subtree : true } );
+    var observer = new MutationObserver( function ( records ) {
+            try {
+                stop_observe();
+                log_debug( '*** MutationObserver ***', records );
+                update_display_mode();
+                check_timeline_tweets( d.body );
+                check_help_dialog();
+            }
+            catch ( error ) {
+            }
+            finally {
+                start_observe();
+            }
+        } ),
+        start_observe = () => observer.observe( d.body, { childList : true, subtree : true } ),
+        stop_observe = () => observer.disconnect();
+    start_observe();
 } // end of start_mutation_observer()
 
 
