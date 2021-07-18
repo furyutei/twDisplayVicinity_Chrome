@@ -714,7 +714,8 @@ function get_screen_name_from_url( url ) {
 
 
 function is_error_page() {
-    return ( 0 < $( 'div[data-testid="primaryColumn"] h1[role="heading"][data-testid="error-detail"]' ).length );
+    //return ( 0 < $( 'div[data-testid="primaryColumn"] h1[role="heading"][data-testid="error-detail"]' ).length );
+    return ( 0 < $( 'div[data-testid="primaryColumn"] [data-testid="error-detail"]' ).length );
 } // end of is_error_page()
 
 
@@ -4390,9 +4391,13 @@ function check_notification_timeline() {
 
 
 function check_error_page() {
+    var result = false;
+    
     if ( ! is_error_page() ) {
-        return false;
+        return result;
     }
+    
+    result = true; // エラーページの場合はtrueを返す（呼び出し元にてそれ以降の処理は行わない）
     
     var tweet_url = location.href,
         tweet_url_info = parse_individual_tweet_url( tweet_url ),
@@ -4400,7 +4405,7 @@ function check_error_page() {
         timestamp_ms;
     
     if ( ! tweet_url_info || ( 0 < $vicinity_link_containers.length ) ) {
-        return true; // エラーページの場合はそれ以降のチェックはしない
+        return result;
     }
     
     // TODO: 個別ツイートの場合、日付が取得できない→ツイートIDから取得しているが、2010年11月以前は未対応
@@ -4408,7 +4413,10 @@ function check_error_page() {
         timestamp_ms = tweet_id_to_date( tweet_url_info.tweet_id ).getTime();
     }
     catch ( error ) {
-        timestamp_ms = '';
+    }
+    
+    if ( ! timestamp_ms ) {
+        return result;
     }
     
     var $link_container = create_vicinity_link_container( {
@@ -4418,11 +4426,17 @@ function check_error_page() {
                 'data-timestamp_ms' : timestamp_ms,
             }
         } ),
-        $parent = $( 'div[data-testid="primaryColumn"] h1[role="heading"][data-testid="error-detail"]:first' );
+        //$parent = $( 'div[data-testid="primaryColumn"] h1[role="heading"][data-testid="error-detail"]:first' );
+        $search_link = $( 'div[data-testid="primaryColumn"] [data-testid="error-detail"] a[role="link"][href^="/search"]' ),
+        $parent =$search_link.parents( '[dir="auto"]:first' );
+    
+    if ( $parent.length < 1 ) {
+        $parent = $search_link.parent();
+    }
     
     $parent.append( $link_container );
     
-    return true;
+    return result;
 
 } // end of check_error_page()
 
