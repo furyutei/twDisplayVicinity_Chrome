@@ -1088,7 +1088,9 @@ var [
         
         reg_graphql = /(^|\/api)\/graphql\//,
         reg_graphql_retweeters = /(^|\/api)\/graphql\/[^/]+\/Retweeters/,
-        reg_graphql_UserTweetsAndReplies = /(^|\/api)\/graphql\/[^/]+\/UserTweetsAndReplies/,
+        reg_graphql_UserTweetsAndReplies = /(^|\/api)\/graphql\/[^/]+\/(UserTweetsAndReplies|TweetDetail)/,
+        reg_graphql_TweetDetail = /(^|\/api)\/graphql\/[^/]+\/TweetDetail/,
+        // [2021.07.20] 個別ツイート取得時に呼び出されるAPIが UserTweetsAndReplies から TweetDetail に変更された模様（必要な要素の構造は同じなので処理も共通とする）
         
         reg_capture_url_list = [
             reg_api_2,
@@ -1457,7 +1459,6 @@ var [
                 if ( ! reg_graphql_retweeters.test( url_path ) ) {
                     return;
                 }
-                
                 var tweet_id;
                 
                 try {
@@ -1540,7 +1541,17 @@ var [
                     return;
                 }
                 
-                var entries = json.data.user.result.timeline.timeline.instructions[ 0 ].entries,
+                var entries = ( () => {
+                        // ※ APIによって entries の位置が異なる
+                        if ( reg_graphql_TweetDetail.test( url_path ) ) {
+                            // /api/graphql/.*/TweetDetail の場合
+                            return json.data.threaded_conversation_with_injections.instructions[ 0 ].entries;
+                        }
+                        else {
+                            // /api/graphql/.*/UserTweetsAndReplies の場合
+                            return json.data.user.result.timeline.timeline.instructions[ 0 ].entries;
+                        }
+                    } )(),
                     tweets = entries.reduce( ( tweets, entry ) => {
                         if ( ( ! entry.content.itemContent ) || ( ! entry.content.itemContent.tweet_results ) ) {
                             return tweets;
@@ -3425,7 +3436,7 @@ function check_timeline_tweets() {
                 // 設定時例  : https://pbs.twimg.com/profile_images/<user-id>/<icon-image-name>
                 // 未設定時例: https://abs.twimg.com/sticky/default_profile_images/default_profile_normal.png
                 act_screen_name = ( $profile_image_link.attr( 'href' ) || '' ).replace( /^\//, '' );
-            
+
             if ( ! act_screen_name ) {
                 return;
             }
@@ -4507,6 +4518,7 @@ function start_key_observer() {
                 $target_element = get_current_retweeter();
                 if ( $target_element.length <= 0 ) {
                     $target_element = get_first_retweeter();
+                    $target_element.focus();
                 }
             }
             else {
